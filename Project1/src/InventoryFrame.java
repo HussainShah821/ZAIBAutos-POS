@@ -62,7 +62,7 @@ public class InventoryFrame extends JFrame {
             }
         });
 
-        addButton.addActionListener(_ -> addProduct());
+        addButton.addActionListener(e -> addProduct());
         updateButton.addActionListener(e -> updateProduct());
         deleteButton.addActionListener(e -> deleteProduct());
 

@@ -1,9 +1,13 @@
 import javax.swing.*;
+import javax.swing.event.DocumentEvent;
+import javax.swing.event.DocumentListener;
 import javax.swing.table.DefaultTableModel;
 import javax.swing.table.TableRowSorter;
 import java.awt.*;
 import java.awt.event.*;
 import java.text.SimpleDateFormat;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Date;
 
 public class CustomerLedgerFrame extends JFrame {
@@ -13,43 +17,83 @@ public class CustomerLedgerFrame extends JFrame {
     private JPanel mainPanel, detailPanel;
     private JLabel customerNameLabel, phoneLabel, balanceLabel;
     private int selectedCustomerRow = -1;
+    private ArrayList<Product> inventoryProducts;
+
+    private static class Product {
+        int id;
+        String name;
+        String brand;
+        double price;
+        String type;
+        String uom;
+
+        Product(int id, String name, String brand, double price, String type, String uom) {
+            this.id = id;
+            this.name = name;
+            this.brand = brand;
+            this.price = price;
+            this.type = type;
+            this.uom = uom;
+        }
+
+        @Override
+        public String toString() {
+            return name + " (" + brand + ")";
+        }
+    }
 
     public CustomerLedgerFrame() {
-        setTitle("Customer Ledger");
+        setTitle("Zaib Autos - Customer Ledger");
         setSize(1000, 600);
         setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
         setLocationRelativeTo(null);
         setLayout(new BorderLayout());
 
+        // Initialize dummy inventory data
+        inventoryProducts = new ArrayList<>();
+        inventoryProducts.add(new Product(1, "Oil Filter", "Bosch", 1500.0, "Filter", "Unit"));
+        inventoryProducts.add(new Product(2, "Brake Pads", "Toyota", 3000.0, "Brake", "Set"));
+        inventoryProducts.add(new Product(3, "Air Filter", "Honda", 1200.0, "Filter", "Unit"));
+
         mainPanel = new JPanel(new BorderLayout(10, 10));
         mainPanel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
+        mainPanel.setBackground(Color.WHITE);
 
         JLabel titleLabel = new JLabel("Customer Ledger");
-        titleLabel.setFont(new Font("Segoe UI", Font.BOLD, 24));
+        titleLabel.setFont(new Font("Arial", Font.BOLD, 24));
+        titleLabel.setForeground(Color.BLACK);
         mainPanel.add(titleLabel, BorderLayout.NORTH);
 
         JPanel centerPanel = new JPanel(new BorderLayout(5, 5));
+        centerPanel.setBackground(Color.WHITE);
 
         searchField = new JTextField();
+        searchField.setFont(new Font("Arial", Font.PLAIN, 14));
         searchField.setToolTipText("Search by name or phone...");
         centerPanel.add(searchField, BorderLayout.NORTH);
 
         customerTableModel = new DefaultTableModel(new String[]{"Name", "Phone No", "Balance"}, 0);
         customerTable = new JTable(customerTableModel);
+        customerTable.setFont(new Font("Arial", Font.PLAIN, 14));
+        customerTable.setRowHeight(25);
+        customerTable.setGridColor(new Color(200, 200, 200));
+        customerTable.setShowGrid(true);
         JScrollPane scrollPane = new JScrollPane(customerTable);
         centerPanel.add(scrollPane, BorderLayout.CENTER);
         mainPanel.add(centerPanel, BorderLayout.CENTER);
 
         JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 10));
-        JButton addButton = new JButton("Add Customer");
-        JButton deleteButton = new JButton("Delete Customer");
+        buttonPanel.setBackground(Color.WHITE);
+        JButton addButton = createStyledButton("Add Customer");
+        JButton deleteButton = createStyledButton("Delete Customer");
+        JButton backButton = createStyledButton("Back");
         buttonPanel.add(addButton);
         buttonPanel.add(deleteButton);
+        buttonPanel.add(backButton);
         mainPanel.add(buttonPanel, BorderLayout.SOUTH);
 
         add(mainPanel, BorderLayout.CENTER);
 
-        // Listeners
         searchField.addKeyListener(new KeyAdapter() {
             public void keyReleased(KeyEvent e) {
                 String text = searchField.getText();
@@ -57,8 +101,12 @@ public class CustomerLedgerFrame extends JFrame {
             }
         });
 
-        addButton.addActionListener(_ -> addCustomer());
-        deleteButton.addActionListener(_ -> deleteCustomer());
+        addButton.addActionListener(e -> addCustomer());
+        deleteButton.addActionListener(e -> deleteCustomer());
+        backButton.addActionListener(e -> {
+            dispose();
+            new MainDashboard();
+        });
 
         customerTable.addMouseListener(new MouseAdapter() {
             public void mouseClicked(MouseEvent e) {
@@ -70,6 +118,27 @@ public class CustomerLedgerFrame extends JFrame {
         });
 
         setVisible(true);
+    }
+
+    private JButton createStyledButton(String text) {
+        JButton button = new JButton(text);
+        button.setFont(new Font("Arial", Font.BOLD, 14));
+        button.setBackground(new Color(70, 130, 180));
+        button.setForeground(Color.WHITE);
+        button.setFocusPainted(false);
+        button.setBorder(BorderFactory.createEmptyBorder(5, 15, 5, 15));
+        button.addMouseListener(new MouseAdapter() {
+            @Override
+            public void mouseEntered(MouseEvent e) {
+                button.setBackground(new Color(100, 150, 200));
+            }
+
+            @Override
+            public void mouseExited(MouseEvent e) {
+                button.setBackground(new Color(70, 130, 180));
+            }
+        });
+        return button;
     }
 
     private void filterCustomerTable(String searchText) {
@@ -86,13 +155,22 @@ public class CustomerLedgerFrame extends JFrame {
         JTextField nameField = new JTextField();
         JTextField phoneField = new JTextField();
 
-        JPanel panel = new JPanel(new GridLayout(2, 2));
-        panel.add(new JLabel("Name:")); panel.add(nameField);
-        panel.add(new JLabel("Phone:")); panel.add(phoneField);
+        JPanel panel = new JPanel(new GridLayout(2, 2, 5, 5));
+        panel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
+        panel.add(new JLabel("Name:"));
+        panel.add(nameField);
+        panel.add(new JLabel("Phone:"));
+        panel.add(phoneField);
 
-        int result = JOptionPane.showConfirmDialog(this, panel, "Add Customer", JOptionPane.OK_CANCEL_OPTION);
+        int result = JOptionPane.showConfirmDialog(this, panel, "Add Customer", JOptionPane.OK_CANCEL_OPTION, JOptionPane.PLAIN_MESSAGE);
         if (result == JOptionPane.OK_OPTION) {
-            customerTableModel.addRow(new Object[]{nameField.getText(), phoneField.getText(), "0"});
+            String name = nameField.getText().trim();
+            String phone = phoneField.getText().trim();
+            if (name.isEmpty() || phone.isEmpty()) {
+                JOptionPane.showMessageDialog(this, "Name and phone are required.", "Error", JOptionPane.ERROR_MESSAGE);
+                return;
+            }
+            customerTableModel.addRow(new Object[]{name, phone, "0"});
         }
     }
 
@@ -117,11 +195,16 @@ public class CustomerLedgerFrame extends JFrame {
 
         detailPanel = new JPanel(new BorderLayout(10, 10));
         detailPanel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
+        detailPanel.setBackground(Color.WHITE);
 
         JPanel infoPanel = new JPanel(new GridLayout(3, 1));
+        infoPanel.setBackground(Color.WHITE);
         customerNameLabel = new JLabel("Customer: " + customerTableModel.getValueAt(selectedCustomerRow, 0));
+        customerNameLabel.setFont(new Font("Arial", Font.BOLD, 16));
         phoneLabel = new JLabel("Phone: " + customerTableModel.getValueAt(selectedCustomerRow, 1));
+        phoneLabel.setFont(new Font("Arial", Font.PLAIN, 14));
         balanceLabel = new JLabel("Balance: " + customerTableModel.getValueAt(selectedCustomerRow, 2));
+        balanceLabel.setFont(new Font("Arial", Font.PLAIN, 14));
         infoPanel.add(customerNameLabel);
         infoPanel.add(phoneLabel);
         infoPanel.add(balanceLabel);
@@ -129,18 +212,22 @@ public class CustomerLedgerFrame extends JFrame {
 
         purchaseTableModel = new DefaultTableModel(new String[]{"Date", "Item", "Brand", "Type", "UOM", "Qty", "Price", "Total"}, 0);
         purchaseTable = new JTable(purchaseTableModel);
+        purchaseTable.setFont(new Font("Arial", Font.PLAIN, 14));
+        purchaseTable.setRowHeight(25);
+        purchaseTable.setGridColor(new Color(200, 200, 200));
+        purchaseTable.setShowGrid(true);
         JScrollPane purchaseScrollPane = new JScrollPane(purchaseTable);
         detailPanel.add(purchaseScrollPane, BorderLayout.CENTER);
 
         JPanel bottomPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 10));
-        JButton addPurchaseBtn = new JButton("Add Purchase");
-        JButton generateBillBtn = new JButton("Generate Bill");
-        JButton backBtn = new JButton("Back");
+        bottomPanel.setBackground(Color.WHITE);
+        JButton addPurchaseBtn = createStyledButton("Add Purchase");
+        JButton generateBillBtn = createStyledButton("Generate Bill");
+        JButton backBtn = createStyledButton("Back");
 
         bottomPanel.add(addPurchaseBtn);
         bottomPanel.add(generateBillBtn);
         bottomPanel.add(backBtn);
-
         detailPanel.add(bottomPanel, BorderLayout.SOUTH);
 
         add(detailPanel, BorderLayout.CENTER);
@@ -151,6 +238,7 @@ public class CustomerLedgerFrame extends JFrame {
         generateBillBtn.addActionListener(e -> generateBill());
         backBtn.addActionListener(e -> {
             remove(detailPanel);
+            detailPanel = null;
             mainPanel.setVisible(true);
             revalidate();
             repaint();
@@ -158,43 +246,134 @@ public class CustomerLedgerFrame extends JFrame {
     }
 
     private void addPurchase() {
-        JTextField itemField = new JTextField();
-        JTextField brandField = new JTextField();
-        JTextField typeField = new JTextField();
-        JTextField uomField = new JTextField();
+        // Create components
+        JTextField searchField = new JTextField();
+        JComboBox<Product> productComboBox = new JComboBox<>();
         JTextField qtyField = new JTextField();
-        JTextField priceField = new JTextField();
 
-        JPanel panel = new JPanel(new GridLayout(6, 2));
-        panel.add(new JLabel("Item:")); panel.add(itemField);
-        panel.add(new JLabel("Brand:")); panel.add(brandField);
-        panel.add(new JLabel("Type:")); panel.add(typeField);
-        panel.add(new JLabel("UOM:")); panel.add(uomField);
-        panel.add(new JLabel("Quantity:")); panel.add(qtyField);
-        panel.add(new JLabel("Price:")); panel.add(priceField);
+        // Backup list for filtering
+        List<Product> filteredList = new ArrayList<>(inventoryProducts);
 
-        int result = JOptionPane.showConfirmDialog(this, panel, "Add Purchase", JOptionPane.OK_CANCEL_OPTION);
-        if (result == JOptionPane.OK_OPTION) {
+        // Add all products initially
+        for (Product product : filteredList) {
+            productComboBox.addItem(product);
+        }
+
+        // Set up search functionality
+        searchField.getDocument().addDocumentListener(new DocumentListener() {
+            private void filterItems() {
+                SwingUtilities.invokeLater(() -> {
+                    String input = searchField.getText().toLowerCase();
+                    productComboBox.removeAllItems();
+                    for (Product product : filteredList) {
+                        if (product.toString().toLowerCase().contains(input)) {
+                            productComboBox.addItem(product);
+                        }
+                    }
+                    productComboBox.showPopup();
+                });
+            }
+
+            @Override
+            public void insertUpdate(DocumentEvent e) { filterItems(); }
+
+            @Override
+            public void removeUpdate(DocumentEvent e) { filterItems(); }
+
+            @Override
+            public void changedUpdate(DocumentEvent e) { filterItems(); }
+        });
+
+        // Make combo box editable for better user experience
+        productComboBox.setEditable(true);
+
+        // Create panel layout with GridBagLayout
+        JPanel panel = new JPanel(new GridBagLayout());
+        panel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
+        GridBagConstraints gbc = new GridBagConstraints();
+        gbc.insets = new Insets(5, 5, 5, 5);
+        gbc.fill = GridBagConstraints.HORIZONTAL;
+        gbc.weightx = 1.0;
+
+        // Search field
+        gbc.gridx = 0;
+        gbc.gridy = 0;
+        gbc.gridwidth = 2;
+        panel.add(new JLabel("Search Product:"), gbc);
+
+        gbc.gridx = 0;
+        gbc.gridy = 1;
+        gbc.gridwidth = 2;
+        searchField.setPreferredSize(new Dimension(200, 30));
+        panel.add(searchField, gbc);
+
+        // Product combo box
+        gbc.gridx = 0;
+        gbc.gridy = 2;
+        gbc.gridwidth = 2;
+        productComboBox.setPreferredSize(new Dimension(200, 30));
+        panel.add(new JLabel("Select Product:"), gbc);
+
+        gbc.gridx = 0;
+        gbc.gridy = 3;
+        gbc.gridwidth = 2;
+        panel.add(productComboBox, gbc);
+
+        // Quantity field
+        gbc.gridx = 0;
+        gbc.gridy = 4;
+        gbc.gridwidth = 2;
+        panel.add(new JLabel("Quantity:"), gbc);
+
+        gbc.gridx = 0;
+        gbc.gridy = 5;
+        gbc.gridwidth = 2;
+        qtyField.setPreferredSize(new Dimension(200, 30));
+        panel.add(qtyField, gbc);
+
+        // Show input dialog
+        JOptionPane optionPane = new JOptionPane(panel, JOptionPane.PLAIN_MESSAGE, JOptionPane.OK_CANCEL_OPTION);
+        JDialog dialog = optionPane.createDialog(this, "Add Purchase");
+        dialog.pack();
+        dialog.setLocationRelativeTo(this);
+        dialog.setVisible(true);
+
+        Integer result = (Integer) optionPane.getValue();
+        if (result != null && result == JOptionPane.OK_OPTION) {
             try {
-                int qty = Integer.parseInt(qtyField.getText());
-                double price = Double.parseDouble(priceField.getText());
+                Product selectedProduct = (Product) productComboBox.getSelectedItem();
+                if (selectedProduct == null) {
+                    JOptionPane.showMessageDialog(this, "Please select a product.", "Error", JOptionPane.ERROR_MESSAGE);
+                    return;
+                }
+
+                int qty = Integer.parseInt(qtyField.getText().trim());
+                if (qty <= 0) {
+                    JOptionPane.showMessageDialog(this, "Quantity must be greater than zero.", "Error", JOptionPane.ERROR_MESSAGE);
+                    return;
+                }
+
+                double price = selectedProduct.price;
                 double total = qty * price;
                 String date = new SimpleDateFormat("dd-MM-yyyy").format(new Date());
 
                 purchaseTableModel.addRow(new Object[]{
-                        date, itemField.getText(), brandField.getText(), typeField.getText(),
-                        uomField.getText(), qty, price, total
+                        date, selectedProduct.name, selectedProduct.brand,
+                        selectedProduct.type, selectedProduct.uom, qty, price, total
                 });
 
-                double currentBalance = Double.parseDouble(customerTableModel.getValueAt(selectedCustomerRow, 2).toString());
+                double currentBalance = Double.parseDouble(
+                        customerTableModel.getValueAt(selectedCustomerRow, 2).toString());
                 double updatedBalance = currentBalance + total;
                 customerTableModel.setValueAt(updatedBalance, selectedCustomerRow, 2);
                 balanceLabel.setText("Balance: " + updatedBalance);
-            } catch (Exception ex) {
-                JOptionPane.showMessageDialog(this, "Invalid input. Please enter valid numbers.", "Error", JOptionPane.ERROR_MESSAGE);
+
+            } catch (NumberFormatException ex) {
+                JOptionPane.showMessageDialog(this, "Invalid quantity. Please enter a valid number.", "Error", JOptionPane.ERROR_MESSAGE);
             }
         }
     }
+
 
     private void generateBill() {
         double total = 0;
@@ -210,8 +389,11 @@ public class CustomerLedgerFrame extends JFrame {
 
         try {
             double paid = Double.parseDouble(amountPaidStr);
+            if (paid < 0) {
+                JOptionPane.showMessageDialog(this, "Amount paid cannot be negative.", "Error", JOptionPane.ERROR_MESSAGE);
+                return;
+            }
             double balance = total - paid;
-
             double currentBalance = Double.parseDouble(customerTableModel.getValueAt(selectedCustomerRow, 2).toString());
             double newBalance = currentBalance - paid;
             customerTableModel.setValueAt(newBalance, selectedCustomerRow, 2);
@@ -222,16 +404,15 @@ public class CustomerLedgerFrame extends JFrame {
             String voucherNo = "INV-" + new SimpleDateFormat("yyyyMMddHHmmss").format(new Date());
             String dateStr = new SimpleDateFormat("dd-MMM-yyyy").format(new Date());
 
-            BillPanel billPanel = new BillPanel(customerName, phone, voucherNo, dateStr,
-                    purchaseTableModel, total, paid, balance);
+            JDialog billDialog = new JDialog(this, "Generated Bill", true);
+            billDialog.setSize(650, 900);
+            billDialog.setLocationRelativeTo(this);
 
-            JScrollPane scrollPane = new JScrollPane(billPanel);
-            scrollPane.setPreferredSize(new Dimension(650, 700));
-
-            JOptionPane.showMessageDialog(this, scrollPane, "Generated Bill", JOptionPane.PLAIN_MESSAGE);
-
-        } catch (Exception e) {
-            JOptionPane.showMessageDialog(this, "Invalid amount paid.", "Error", JOptionPane.ERROR_MESSAGE);
+            BillPanel billPanel = new BillPanel(customerName, phone, voucherNo, dateStr, purchaseTableModel, total, paid, balance);
+            billDialog.add(billPanel);
+            billDialog.setVisible(true);
+        } catch (NumberFormatException e) {
+            JOptionPane.showMessageDialog(this, "Invalid amount paid. Please enter a valid number.", "Error", JOptionPane.ERROR_MESSAGE);
         }
     }
 

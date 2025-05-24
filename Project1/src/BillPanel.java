@@ -1,108 +1,66 @@
-import java.awt.*;
-import java.awt.Font;
-import java.awt.print.*;
-import java.io.*;
 import javax.swing.*;
 import javax.swing.table.*;
-import com.itextpdf.text.*;
-import com.itextpdf.text.pdf.*;
+import java.awt.*;
+import java.awt.print.*;
+import java.io.*;
+import java.text.SimpleDateFormat;
+import java.util.Date;
 
-class BillPanel extends JPanel {
-    private JTextField customerNameField, addressField, cityField, contactField;
-    private JTextField voucherField, dateField, totalField, paidField, balanceField;
-    private JTextArea amountWordsArea;
+class BillPanel extends JPanel implements Printable {
+    private JLabel customerNameLabel, contactLabel, voucherLabel, dateLabel, totalLabel, paidLabel, balanceLabel, amountWordsLabel;
+    private JTable billTable;
+    private DefaultTableModel purchaseTableModel;
+    private double total, paid, balance;
 
     public BillPanel(String customerName, String phone, String voucherNo, String dateStr,
                      DefaultTableModel purchaseTableModel, double total, double paid, double balance) {
-        setLayout(null);
-        setPreferredSize(new Dimension(600, 900));
+        this.purchaseTableModel = purchaseTableModel;
+        this.total = total;
+        this.paid = paid;
+        this.balance = balance;
+
+        setLayout(new BoxLayout(this, BoxLayout.Y_AXIS));
         setBackground(Color.WHITE);
+        setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
 
-        createComponents(customerName, phone, voucherNo, dateStr, purchaseTableModel, total, paid, balance);
-
-        JButton printButton = new JButton("Print Bill");
-        printButton.setBounds(200, 800, 100, 30);
-        printButton.addActionListener(e -> printBill());
-        add(printButton);
-
-        JButton exportButton = new JButton("Export to PDF");
-        exportButton.setBounds(320, 800, 120, 30);
-        exportButton.addActionListener(e -> exportToPDF());
-        add(exportButton);
-    }
-
-    private void createComponents(String customerName, String phone, String voucherNo, String dateStr,
-                                  DefaultTableModel purchaseTableModel, double total, double paid, double balance) {
+        // Shop Header
         JLabel shopLabel = new JLabel("ZAIB-AUTOS", JLabel.CENTER);
-        shopLabel.setFont(new Font("Arial", Font.BOLD, 24));
-        shopLabel.setBounds(0, 10, 600, 30);
+        shopLabel.setFont(new Font("Segoe UI", Font.BOLD, 24));
+        shopLabel.setAlignmentX(Component.CENTER_ALIGNMENT);
         add(shopLabel);
 
         JLabel addrLabel = new JLabel("GT.ROAD GHOTKI", JLabel.CENTER);
         addrLabel.setFont(new Font("Arial", Font.PLAIN, 14));
-        addrLabel.setBounds(0, 40, 600, 20);
+        addrLabel.setAlignmentX(Component.CENTER_ALIGNMENT);
         add(addrLabel);
 
         JLabel estimateLabel = new JLabel("ESTIMATE", JLabel.CENTER);
         estimateLabel.setFont(new Font("Arial", Font.BOLD, 18));
-        estimateLabel.setBounds(0, 70, 600, 25);
+        estimateLabel.setAlignmentX(Component.CENTER_ALIGNMENT);
         add(estimateLabel);
 
-        // Customer details
-        addLabelAndField("Customer Name:", 50, 110, customerNameField = createBorderlessTextField(customerName));
-        addLabelAndField("Address:", 50, 135, addressField = createBorderlessTextField(""));
-        addLabelAndField("City:", 50, 160, cityField = createBorderlessTextField(""));
-        addLabelAndField("Contact No:", 50, 185, contactField = createBorderlessTextField(phone));
+        add(Box.createVerticalStrut(10));
 
-        addSeparator(20, 210, 560);
+        // Customer and Bill Info
+        JPanel infoPanel = new JPanel(new GridLayout(2, 2, 10, 5));
+        infoPanel.setBackground(Color.WHITE);
+        infoPanel.add(new JLabel("Customer Name:"));
+        customerNameLabel = new JLabel(customerName);
+        infoPanel.add(customerNameLabel);
+        infoPanel.add(new JLabel("Voucher No:"));
+        voucherLabel = new JLabel(voucherNo);
+        infoPanel.add(voucherLabel);
+        infoPanel.add(new JLabel("Contact No:"));
+        contactLabel = new JLabel(phone);
+        infoPanel.add(contactLabel);
+        infoPanel.add(new JLabel("Date:"));
+        dateLabel = new JLabel(dateStr);
+        infoPanel.add(dateLabel);
+        add(infoPanel);
 
-        // Bill info
-        addLabelAndField("Voucher No:", 350, 110, voucherField = createBorderlessTextField(voucherNo));
-        addLabelAndField("Date:", 350, 135, dateField = createBorderlessTextField(dateStr));
+        add(Box.createVerticalStrut(10));
 
-        DefaultTableModel billTableModel = createBillTableModel(purchaseTableModel);
-        JTable table = createBillTable(billTableModel);
-        JScrollPane scroll = new JScrollPane(table);
-        scroll.setBounds(20, 240, 560, billTableModel.getRowCount() * 25 + 25);
-        setScrollPaneStyle(scroll, table);
-        add(scroll);
-
-        addPaymentDetailsSection(scroll.getY() + scroll.getHeight() + 10, total, paid, balance);
-    }
-
-    private void addLabelAndField(String label, int x, int y, JTextField field) {
-        JLabel jLabel = new JLabel(label);
-        jLabel.setFont(new Font("Arial", Font.BOLD, 12));
-        jLabel.setBounds(x, y, 100, 20);
-        add(jLabel);
-
-        field.setBounds(x + 110, y, 300, 20);
-        add(field);
-    }
-
-    private void addSeparator(int x, int y, int width) {
-        JSeparator separator = new JSeparator();
-        separator.setBounds(x, y, width, 2);
-        add(separator);
-    }
-
-    private JTextField createBorderlessTextField(String text) {
-        JTextField field = new JTextField(text);
-        field.setBorder(BorderFactory.createEmptyBorder());
-        field.setOpaque(false);
-        field.setEditable(false);
-        return field;
-    }
-
-    private void setScrollPaneStyle(JScrollPane scroll, JTable table) {
-        scroll.getViewport().setOpaque(false);
-        scroll.setOpaque(false);
-        scroll.getViewport().setBackground(Color.WHITE);
-        table.setOpaque(false);
-        ((DefaultTableCellRenderer) table.getTableHeader().getDefaultRenderer()).setOpaque(false);
-    }
-
-    private DefaultTableModel createBillTableModel(DefaultTableModel purchaseTableModel) {
+        // Purchase Table
         DefaultTableModel billTableModel = new DefaultTableModel(
                 new String[]{"", "Item Name", "Brand", "Type", "Qty", "UOM", "Rate", "Total"}, 0) {
             @Override
@@ -110,7 +68,6 @@ class BillPanel extends JPanel {
                 return false;
             }
         };
-
         for (int i = 0; i < purchaseTableModel.getRowCount(); i++) {
             billTableModel.addRow(new Object[]{
                     (Object) (i + 1),
@@ -123,65 +80,78 @@ class BillPanel extends JPanel {
                     purchaseTableModel.getValueAt(i, 7)
             });
         }
-        return billTableModel;
-    }
+        billTable = new JTable(billTableModel);
+        billTable.setFont(new Font("Arial", Font.PLAIN, 12));
+        billTable.setRowHeight(25);
+        billTable.getTableHeader().setFont(new Font("Arial", Font.BOLD, 12));
+        billTable.setShowGrid(true);
+        billTable.setGridColor(Color.LIGHT_GRAY);
+        JScrollPane scroll = new JScrollPane(billTable);
+        scroll.setPreferredSize(new Dimension(600, billTableModel.getRowCount() * 25 + 25));
+        scroll.getViewport().setBackground(Color.WHITE);
+        add(scroll);
 
-    private JTable createBillTable(DefaultTableModel model) {
-        JTable table = new JTable(model);
-        table.setFont(new Font("Arial", Font.PLAIN, 12));
-        table.setRowHeight(25);
-        table.getTableHeader().setFont(new Font("Arial", Font.BOLD, 12));
-        table.setShowGrid(true);
-        table.setGridColor(Color.LIGHT_GRAY);
-        return table;
-    }
+        add(Box.createVerticalStrut(10));
 
-    private void addPaymentDetailsSection(int yPos, double total, double paid, double balance) {
-        addSeparator(20, yPos, 560);
+        // Payment Details
+        JPanel paymentPanel = new JPanel(new GridLayout(4, 2, 10, 5));
+        paymentPanel.setBackground(Color.WHITE);
+        paymentPanel.add(new JLabel("Total Amount:"));
+        totalLabel = new JLabel(String.format("%.2f", total));
+        paymentPanel.add(totalLabel);
+        paymentPanel.add(new JLabel("Amount Paid:"));
+        paidLabel = new JLabel(String.format("%.2f", paid));
+        paymentPanel.add(paidLabel);
+        paymentPanel.add(new JLabel("Balance:"));
+        balanceLabel = new JLabel(String.format("%.2f", balance));
+        paymentPanel.add(balanceLabel);
+        paymentPanel.add(new JLabel("Amount in Words:"));
+        amountWordsLabel = new JLabel(convertToWords(total));
+        paymentPanel.add(amountWordsLabel);
+        add(paymentPanel);
 
-        JLabel paymentLabel = new JLabel("Payment Details");
-        paymentLabel.setFont(new Font("Arial", Font.BOLD, 12));
-        paymentLabel.setBounds(20, yPos + 15, 200, 20);
-        add(paymentLabel);
+        add(Box.createVerticalStrut(10));
 
-        addLabelAndField("Total Amount:", 350, paymentLabel.getY(), totalField = createBorderlessTextField(String.format("%.2f")));
-        addLabelAndField("Amount Paid:", 350, paymentLabel.getY() + 30, paidField = createBorderlessTextField(String.format("%.2f")));
-        addLabelAndField("Balance:", 350, paymentLabel.getY() + 60, balanceField = createBorderlessTextField(String.format("%.2f")));
-
-        JLabel amountWordsLabel = new JLabel("Amount in Words:");
-        amountWordsLabel.setBounds(20, paymentLabel.getY() + 30, 120, 20);
-        add(amountWordsLabel);
-
-        amountWordsArea = new JTextArea(convertToWords(total));
-        amountWordsArea.setBounds(20, paymentLabel.getY() + 50, 300, 40);
-        amountWordsArea.setBorder(BorderFactory.createEmptyBorder());
-        amountWordsArea.setEditable(false);
-        amountWordsArea.setLineWrap(true);
-        amountWordsArea.setWrapStyleWord(true);
-        amountWordsArea.setBackground(Color.WHITE);
-        amountWordsArea.setFont(new Font("Arial", Font.PLAIN, 12));
-        add(amountWordsArea);
-
+        // Thank You
         JLabel thanksLabel = new JLabel("Thank you for your business!", JLabel.CENTER);
         thanksLabel.setFont(new Font("Arial", Font.BOLD, 14));
-        thanksLabel.setBounds(0, balanceField.getY() + 40, 600, 20);
+        thanksLabel.setAlignmentX(Component.CENTER_ALIGNMENT);
         add(thanksLabel);
+
+        add(Box.createVerticalStrut(10));
+
+        // Buttons
+        JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.CENTER, 10, 0));
+        buttonPanel.setBackground(Color.WHITE);
+        JButton printButton = new JButton("Print Bill");
+        printButton.addActionListener(e -> printBill());
+        buttonPanel.add(printButton);
+
+        JButton exportPdfButton = new JButton("Export to PDF");
+        exportPdfButton.addActionListener(e -> exportToPDF());
+        buttonPanel.add(exportPdfButton);
+
+        add(buttonPanel);
+
+        // Adjust panel height dynamically
+        int totalHeight = 150 + (billTableModel.getRowCount() * 25 + 25) + 150 + 50; // Header + table + payment + buttons
+        setPreferredSize(new Dimension(600, totalHeight));
+    }
+
+    private String convertToWords(double number) {
+        int rupees = (int) number;
+        int paise = (int) ((number - rupees) * 100);
+        String result = rupees + " Rupees";
+        if (paise > 0) {
+            result += " and " + paise + " Paise";
+        }
+        return result + " Only";
     }
 
     private void printBill() {
         PrinterJob job = PrinterJob.getPrinterJob();
+        job.setPrintable(this);
         job.setJobName("ZAIB-AUTOS Bill");
-
-        job.setPrintable((graphics, pageFormat, pageIndex) -> {
-            if (pageIndex > 0) return Printable.NO_SUCH_PAGE;
-            Graphics2D g2d = (Graphics2D) graphics;
-            g2d.translate(pageFormat.getImageableX(), pageFormat.getImageableY());
-            double scale = Math.min(pageFormat.getImageableWidth() / getWidth(),
-                    pageFormat.getImageableHeight() / getHeight());
-            g2d.scale(scale, scale);
-            printAll(g2d);
-            return Printable.PAGE_EXISTS;
-        });
 
         if (job.printDialog()) {
             try {
@@ -192,24 +162,78 @@ class BillPanel extends JPanel {
         }
     }
 
+    @Override
+    public int print(Graphics graphics, PageFormat pageFormat, int pageIndex) throws PrinterException {
+        if (pageIndex > 0) return NO_SUCH_PAGE;
+
+        Graphics2D g2d = (Graphics2D) graphics;
+        g2d.translate(pageFormat.getImageableX(), pageFormat.getImageableY());
+        double scale = Math.min(pageFormat.getImageableWidth() / getWidth(),
+                pageFormat.getImageableHeight() / getHeight());
+        g2d.scale(scale, scale);
+        printAll(g2d);
+        return PAGE_EXISTS;
+    }
+
     private void exportToPDF() {
-        // Unchanged: your full PDF export logic here...
-    }
+        JFileChooser fileChooser = new JFileChooser();
+        fileChooser.setDialogTitle("Save Bill as PDF");
+        fileChooser.setSelectedFile(new File("ZaibAutos_Bill_" + new SimpleDateFormat("yyyyMMdd_HHmmss").format(new Date()) + ".pdf"));
+        int selection = fileChooser.showSaveDialog(this);
 
-    private void addPdfCell(PdfPTable table, String text, boolean isHeader) {
-        PdfPCell cell = new PdfPCell(new Phrase(text));
-        if (isHeader) cell.setBackgroundColor(BaseColor.LIGHT_GRAY);
-        table.addCell(cell);
-    }
+        if (selection == JFileChooser.APPROVE_OPTION) {
+            File file = fileChooser.getSelectedFile();
+            try (BufferedWriter writer = new BufferedWriter(new FileWriter(file))) {
+                // Write a basic PDF structure (text-only, no external libraries)
+                writer.write("%PDF-1.4\n");
+                writer.write("1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n");
+                writer.write("2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n");
+                writer.write("3 0 obj\n<< /Type /Page /Parent 2 0 R /Resources << /Font << /F1 << /Type /Font /Subtype /Type1 /BaseFont /Helvetica >> >> >> /MediaBox [0 0 612 792] /Contents 4 0 R >>\nendobj\n");
+                writer.write("4 0 obj\n<< /Length 5 0 R >>\nstream\n");
+                writer.write("BT /F1 12 Tf 50 750 Td (ZAIB-AUTOS) Tj ET\n");
+                writer.write("BT /F1 10 Tf 50 730 Td (GT.ROAD GHOTKI) Tj ET\n");
+                writer.write("BT /F1 12 Tf 50 710 Td (ESTIMATE) Tj ET\n");
+                writer.write("BT /F1 10 Tf 50 690 Td (Customer Name: " + customerNameLabel.getText() + ") Tj ET\n");
+                writer.write("BT /F1 10 Tf 50 670 Td (Contact No: " + contactLabel.getText() + ") Tj ET\n");
+                writer.write("BT /F1 10 Tf 50 650 Td (Voucher No: " + voucherLabel.getText() + ") Tj ET\n");
+                writer.write("BT /F1 10 Tf 50 630 Td (Date: " + dateLabel.getText() + ") Tj ET\n");
+                int yPos = 610;
+                writer.write("BT /F1 10 Tf 50 " + yPos + " Td (Items Purchased:) Tj ET\n");
+                yPos -= 20;
+                writer.write("BT /F1 10 Tf 50 " + yPos + " Td (  Item Name  Brand  Type  Qty  UOM  Rate  Total) Tj ET\n");
+                yPos -= 20;
+                for (int i = 0; i < purchaseTableModel.getRowCount(); i++) {
+                    String line = String.format("%d  %s  %s  %s  %s  %s  %.2f  %.2f",
+                            (i + 1),
+                            purchaseTableModel.getValueAt(i, 1).toString(),
+                            purchaseTableModel.getValueAt(i, 2).toString(),
+                            purchaseTableModel.getValueAt(i, 3).toString(),
+                            purchaseTableModel.getValueAt(i, 5).toString(),
+                            purchaseTableModel.getValueAt(i, 4).toString(),
+                            Double.parseDouble(purchaseTableModel.getValueAt(i, 6).toString()),
+                            Double.parseDouble(purchaseTableModel.getValueAt(i, 7).toString()));
+                    writer.write("BT /F1 10 Tf 50 " + yPos + " Td (" + line + ") Tj ET\n");
+                    yPos -= 20;
+                }
+                writer.write("BT /F1 10 Tf 50 " + yPos + " Td (Payment Details:) Tj ET\n");
+                yPos -= 20;
+                writer.write("BT /F1 10 Tf 50 " + yPos + " Td (Total Amount: " + totalLabel.getText() + ") Tj ET\n");
+                yPos -= 20;
+                writer.write("BT /F1 10 Tf 50 " + yPos + " Td (Amount Paid: " + paidLabel.getText() + ") Tj ET\n");
+                yPos -= 20;
+                writer.write("BT /F1 10 Tf 50 " + yPos + " Td (Balance: " + balanceLabel.getText() + ") Tj ET\n");
+                yPos -= 20;
+                writer.write("BT /F1 10 Tf 50 " + yPos + " Td (Amount in Words: " + amountWordsLabel.getText() + ") Tj ET\n");
+                yPos -= 20;
+                writer.write("BT /F1 10 Tf 50 " + yPos + " Td (Thank you for your business!) Tj ET\n");
+                writer.write("endstream\nendobj\n");
+                writer.write("5 0 obj\n" + (yPos + 1000) + "\nendobj\n");
+                writer.write("trailer\n<< /Root 1 0 R >>\n%%EOF\n");
 
-    private String convertToWords(double number) {
-        // Basic number to words converter
-        int rupees = (int) number;
-        int paise = (int) ((number - rupees) * 100);
-        String result = rupees + " Rupees";
-        if (paise > 0) {
-            result += " and " + paise + " Paise";
+                JOptionPane.showMessageDialog(this, "PDF exported successfully to " + file.getAbsolutePath(), "Success", JOptionPane.INFORMATION_MESSAGE);
+            } catch (Exception e) {
+                JOptionPane.showMessageDialog(this, "Error exporting PDF: " + e.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
+            }
         }
-        return result + " Only";
     }
 }

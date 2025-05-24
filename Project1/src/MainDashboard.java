@@ -1,22 +1,18 @@
 import javax.swing.*;
 import java.awt.*;
-import java.awt.event.ComponentAdapter;
-import java.awt.event.ComponentEvent;
-import java.awt.event.MouseAdapter;
-import java.awt.event.MouseEvent;
+import java.awt.event.*;
 
 public class MainDashboard extends JFrame {
     private JPanel drawerPanel;
     private boolean isDrawerOpen = false;
     private JButton menuButton;
     private JLabel background;
-    private JLabel title;
     private int drawerWidth = 250;
     private int screenWidth;
     private int screenHeight;
 
     public MainDashboard() {
-        setTitle("Main Dashboard");
+        setTitle("Zaib Autos - Admin Dashboard");
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         setExtendedState(JFrame.MAXIMIZED_BOTH);
 
@@ -56,32 +52,44 @@ public class MainDashboard extends JFrame {
         drawerPanel.add(emailLabel);
 
         // Drawer buttons
-        addDrawerButton("Inventory Management", 200, e -> {
+        int yOffset = 200;
+        addDrawerButton("Inventory Management", yOffset, e -> {
             new InventoryFrame();
             closeDrawer();
         });
-
-        addDrawerButton("Customer Ledger", 250, e -> {
+        addDrawerButton("Customer Ledger", yOffset += 50, e -> {
             new CustomerLedgerFrame();
             closeDrawer();
         });
-
-        addDrawerButton("Supplier Ledger", 300, e -> {
+        addDrawerButton("Supplier Ledger", yOffset += 50, e -> {
             new SupplierLedgerFrame();
             closeDrawer();
         });
-
-        addDrawerButton("Sales Analysis", 350, e -> {
+        addDrawerButton("Sales Entry", yOffset += 50, e -> {
+            new SalesEntryFrame();
+            closeDrawer();
+        });
+        addDrawerButton("Expenditure Tracking", yOffset += 50, e -> {
+            new ExpenditureTrackingFrame();
+            closeDrawer();
+        });
+        addDrawerButton("Profit Entry", yOffset += 50, e -> {
+            new ProfitEntryFrame();
+            closeDrawer();
+        });
+        addDrawerButton("Customer Credit", yOffset += 50, e -> {
+            new CustomerCreditFrame();
+            closeDrawer();
+        });
+        addDrawerButton("Sales Analysis", yOffset += 50, e -> {
             new SalesAnalysisFrame();
             closeDrawer();
         });
-
-        addDrawerButton("Logout", 400, e -> {
+        addDrawerButton("Logout", yOffset += 50, e -> {
             new AdminLogin();
-
+            dispose();
         });
-
-        addDrawerButton("Exit", 450, e -> System.exit(0));
+        addDrawerButton("Exit", yOffset += 50, e -> System.exit(0));
 
         // Menu button
         ImageIcon menuIcon = new ImageIcon(
@@ -91,7 +99,6 @@ public class MainDashboard extends JFrame {
         styleMenuButton(menuButton);
         menuButton.addActionListener(e -> toggleDrawer());
         layeredPane.add(menuButton, Integer.valueOf(3));
-
 
         // Resize listener
         addComponentListener(new ComponentAdapter() {
@@ -111,6 +118,27 @@ public class MainDashboard extends JFrame {
             }
         });
 
+        // Placeholder database fetch (commented out, for future dashboard data)
+        /*
+        try {
+            Connection conn = DriverManager.getConnection("jdbc:mysql://localhost:3306/zaibautos", "root", "");
+            String sql = "SELECT COUNT(*) as total_sales FROM sales WHERE DATE(sale_date) = CURDATE()";
+            PreparedStatement stmt = conn.prepareStatement(sql);
+            ResultSet rs = stmt.executeQuery();
+            if (rs.next()) {
+                // Example: Display daily sales count on dashboard
+                // JLabel salesLabel = new JLabel("Today's Sales: " + rs.getInt("total_sales"));
+                // salesLabel.setBounds(100, 100, 200, 30);
+                // layeredPane.add(salesLabel, Integer.valueOf(2));
+            }
+            rs.close();
+            stmt.close();
+            conn.close();
+        } catch (SQLException ex) {
+            JOptionPane.showMessageDialog(this, "Database error: " + ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
+        }
+        */
+
         setVisible(true);
     }
 
@@ -122,23 +150,28 @@ public class MainDashboard extends JFrame {
 
         // Resize drawer
         drawerPanel.setBounds(isDrawerOpen ? 0 : -drawerWidth, 0, drawerWidth, screenHeight);
-
-        // Resize title
-        title.setBounds(isDrawerOpen ? drawerWidth + 20 : 20, 20,
-                screenWidth - (isDrawerOpen ? drawerWidth + 40 : 40), 50);
-
-        // Menu button
-        menuButton.setBounds(10, 10, 40, 40);
     }
 
-    private void addDrawerButton(String text, int y, java.awt.event.ActionListener action) {
+    private void addDrawerButton(String text, int y, ActionListener action) {
         JButton button = new JButton(text);
         button.setBounds(20, y, 200, 40);
         button.setFont(new Font("Arial", Font.BOLD, 14));
-        button.setBackground(Color.GRAY);
+        button.setBackground(new Color(70, 130, 180));
         button.setForeground(Color.WHITE);
         button.setFocusPainted(false);
+        button.setBorder(BorderFactory.createEmptyBorder(5, 15, 5, 15));
         button.addActionListener(action);
+        button.addMouseListener(new MouseAdapter() {
+            @Override
+            public void mouseEntered(MouseEvent e) {
+                button.setBackground(new Color(100, 150, 200));
+            }
+
+            @Override
+            public void mouseExited(MouseEvent e) {
+                button.setBackground(new Color(70, 130, 180));
+            }
+        });
         drawerPanel.add(button);
     }
 
