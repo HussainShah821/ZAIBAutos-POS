@@ -307,12 +307,7 @@ public class CustomerLedgerFrame extends JFrame {
         searchField.setPreferredSize(new Dimension(200, 30));
         panel.add(searchField, gbc);
 
-        // Product combo box
-        gbc.gridx = 0;
-        gbc.gridy = 2;
-        gbc.gridwidth = 2;
-        productComboBox.setPreferredSize(new Dimension(200, 30));
-        panel.add(new JLabel("Select Product:"), gbc);
+
 
         gbc.gridx = 0;
         gbc.gridy = 3;

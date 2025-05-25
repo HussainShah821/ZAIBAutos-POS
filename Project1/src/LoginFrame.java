@@ -100,10 +100,10 @@ public class LoginFrame extends JFrame {
     // Show Sign Up dialog
     private void showSignUpDialog() {
         JDialog signUpDialog = new JDialog(this, "Sign Up", true);
-        signUpDialog.setSize(400, 300);
+        signUpDialog.setSize(470, 300);
         signUpDialog.setLocationRelativeTo(this);
         signUpDialog.setLayout(null);
-        signUpDialog.setBackground(new Color(255, 255, 255, 220));
+        signUpDialog.setBackground(Color.WHITE);
 
         // Sign Up form components
         JLabel usernameLabel = new JLabel("Username:");
@@ -112,7 +112,7 @@ public class LoginFrame extends JFrame {
         signUpDialog.add(usernameLabel);
 
         RoundedTextField usernameField = new RoundedTextField(20, 20);
-        usernameField.setBounds(150, 30, 200, 35);
+        usernameField.setBounds(200, 30, 200, 35);
         signUpDialog.add(usernameField);
 
         JLabel passwordLabel = new JLabel("Password:");
@@ -121,7 +121,7 @@ public class LoginFrame extends JFrame {
         signUpDialog.add(passwordLabel);
 
         RoundedPasswordField passwordField = new RoundedPasswordField(20, 20);
-        passwordField.setBounds(150, 70, 200, 35);
+        passwordField.setBounds(200, 70, 200, 35);
         signUpDialog.add(passwordField);
 
         JLabel confirmPasswordLabel = new JLabel("Confirm Password:");
@@ -130,7 +130,7 @@ public class LoginFrame extends JFrame {
         signUpDialog.add(confirmPasswordLabel);
 
         RoundedPasswordField confirmPasswordField = new RoundedPasswordField(20, 20);
-        confirmPasswordField.setBounds(150, 110, 200, 35);
+        confirmPasswordField.setBounds(200, 110, 200, 35);
         signUpDialog.add(confirmPasswordField);
 
         JLabel nameLabel = new JLabel("Full Name:");
@@ -139,11 +139,11 @@ public class LoginFrame extends JFrame {
         signUpDialog.add(nameLabel);
 
         RoundedTextField nameField = new RoundedTextField(20, 20);
-        nameField.setBounds(150, 150, 200, 35);
+        nameField.setBounds(200, 150, 200, 35);
         signUpDialog.add(nameField);
 
         RoundedButton submitButton = new RoundedButton("Submit");
-        submitButton.setBounds(150, 200, 100, 35);
+        submitButton.setBounds(180, 200, 100, 35);
         signUpDialog.add(submitButton);
 
         submitButton.addActionListener(e -> {

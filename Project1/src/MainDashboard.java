@@ -33,63 +33,69 @@ public class MainDashboard extends JFrame {
         layeredPane.add(background, Integer.valueOf(1));
 
         // Drawer panel
-        drawerPanel = new JPanel(null);
-        drawerPanel.setBackground(new Color(50, 50, 50, 220));
+        drawerPanel = new JPanel();
+        drawerPanel.setLayout(new BoxLayout(drawerPanel, BoxLayout.Y_AXIS));
+        drawerPanel.setBackground(new Color(44, 62, 80)); // #2C3E50
         drawerPanel.setBounds(-drawerWidth, 0, drawerWidth, screenHeight);
         layeredPane.add(drawerPanel, Integer.valueOf(2));
 
         // Profile info
         JLabel profileLabel = new JLabel("Zaib Autos");
         profileLabel.setForeground(Color.WHITE);
-        profileLabel.setFont(new Font("Arial", Font.BOLD, 20));
-        profileLabel.setBounds(64, 60, 200, 30);
+        profileLabel.setFont(new Font("Segoe UI", Font.BOLD, 20));
+        profileLabel.setAlignmentX(Component.CENTER_ALIGNMENT);
+        profileLabel.setBorder(BorderFactory.createEmptyBorder(60, 0, 0, 0));
         drawerPanel.add(profileLabel);
 
         JLabel emailLabel = new JLabel("Asjal Mehmood");
         emailLabel.setForeground(Color.LIGHT_GRAY);
-        emailLabel.setFont(new Font("Arial", Font.PLAIN, 18));
-        emailLabel.setBounds(50, 100, 200, 30);
+        emailLabel.setFont(new Font("Segoe UI", Font.PLAIN, 18));
+        emailLabel.setAlignmentX(Component.CENTER_ALIGNMENT);
+        emailLabel.setBorder(BorderFactory.createEmptyBorder(10, 0, 30, 0));
         drawerPanel.add(emailLabel);
 
-        // Drawer buttons
-        int yOffset = 200;
-        addDrawerButton("Inventory Management", yOffset, e -> {
+        // Drawer buttons in the recommended order
+        addDrawerButton("Dashboard", e -> {
+            // Already on Dashboard, just close drawer
+            closeDrawer();
+        });
+        addDrawerButton("Inventory Management", e -> {
             new InventoryFrame();
             closeDrawer();
         });
-        addDrawerButton("Customer Ledger", yOffset += 50, e -> {
-            new CustomerLedgerFrame();
-            closeDrawer();
-        });
-        addDrawerButton("Supplier Ledger", yOffset += 50, e -> {
-            new SupplierLedgerFrame();
-            closeDrawer();
-        });
-        addDrawerButton("Sales Entry", yOffset += 50, e -> {
+        addDrawerButton("Sales Entry", e -> {
             new SalesEntryFrame();
             closeDrawer();
         });
-        addDrawerButton("Expenditure Tracking", yOffset += 50, e -> {
-            new ExpenditureTrackingFrame();
+        addDrawerButton("Customer Ledger", e -> {
+            new CustomerLedgerFrame();
             closeDrawer();
         });
-        addDrawerButton("Profit Entry", yOffset += 50, e -> {
-            new ProfitEntryFrame();
+        addDrawerButton("Supplier Ledger", e -> {
+            new SupplierLedgerFrame();
             closeDrawer();
         });
-        addDrawerButton("Customer Credit", yOffset += 50, e -> {
+        addDrawerButton("Customer Credit", e -> {
             new CustomerCreditFrame();
             closeDrawer();
         });
-        addDrawerButton("Sales Analysis", yOffset += 50, e -> {
+        addDrawerButton("Expenditure Tracking", e -> {
+            new ExpenditureTrackingFrame();
+            closeDrawer();
+        });
+        addDrawerButton("Profit Entry", e -> {
+            new ProfitEntryFrame();
+            closeDrawer();
+        });
+        addDrawerButton("Sales Analysis", e -> {
             new SalesAnalysisFrame();
             closeDrawer();
         });
-        addDrawerButton("Logout", yOffset += 50, e -> {
+        addDrawerButton("Logout", e -> {
             new AdminLogin();
             dispose();
-        });
-        addDrawerButton("Exit", yOffset += 50, e -> System.exit(0));
+        }, true); // Critical action
+        addDrawerButton("Exit", e -> System.exit(0), true); // Critical action
 
         // Menu button
         ImageIcon menuIcon = new ImageIcon(
@@ -152,27 +158,33 @@ public class MainDashboard extends JFrame {
         drawerPanel.setBounds(isDrawerOpen ? 0 : -drawerWidth, 0, drawerWidth, screenHeight);
     }
 
-    private void addDrawerButton(String text, int y, ActionListener action) {
+    private void addDrawerButton(String text, ActionListener action) {
+        addDrawerButton(text, action, false);
+    }
+
+    private void addDrawerButton(String text, ActionListener action, boolean isCritical) {
         JButton button = new JButton(text);
-        button.setBounds(20, y, 200, 40);
-        button.setFont(new Font("Arial", Font.BOLD, 14));
-        button.setBackground(new Color(70, 130, 180));
-        button.setForeground(Color.WHITE);
+        button.setFont(new Font("Segoe UI", Font.BOLD, 14));
+        button.setForeground(isCritical ? new Color(231, 76, 60) : Color.WHITE); // #E74C3C for critical actions
+        button.setBackground(new Color(44, 62, 80)); // #2C3E50
         button.setFocusPainted(false);
-        button.setBorder(BorderFactory.createEmptyBorder(5, 15, 5, 15));
+        button.setBorder(BorderFactory.createEmptyBorder(10, 15, 10, 15));
+        button.setAlignmentX(Component.CENTER_ALIGNMENT);
+        button.setMaximumSize(new Dimension(drawerWidth - 40, 40));
         button.addActionListener(action);
         button.addMouseListener(new MouseAdapter() {
             @Override
             public void mouseEntered(MouseEvent e) {
-                button.setBackground(new Color(100, 150, 200));
+                button.setBackground(new Color(41, 128, 185)); // #2980B9
             }
 
             @Override
             public void mouseExited(MouseEvent e) {
-                button.setBackground(new Color(70, 130, 180));
+                button.setBackground(new Color(44, 62, 80)); // #2C3E50
             }
         });
         drawerPanel.add(button);
+        drawerPanel.add(Box.createVerticalStrut(5)); // Spacing between buttons
     }
 
     private void styleMenuButton(JButton button) {
