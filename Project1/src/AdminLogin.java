@@ -136,7 +136,7 @@ class RoundedButton extends JButton {
     }
 }
 
-public class    AdminLogin extends JFrame {
+public class AdminLogin extends JFrame {
     private String userName = "admin";
     private String password = "admin";
     private final String mpin = "123";

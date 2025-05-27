@@ -4,8 +4,8 @@ import java.awt.event.*;
 
 public class MainDashboard extends JFrame {
     private JPanel drawerPanel;
-    private boolean isDrawerOpen = false;
-    private JButton menuButton;
+    private boolean isDrawerOpen = true;
+    private JButton openButton;
     private JLabel background;
     private int drawerWidth = 250;
     private int screenWidth;
@@ -21,7 +21,7 @@ public class MainDashboard extends JFrame {
         screenWidth = screenSize.width;
         screenHeight = screenSize.height;
 
-        // Layered pane
+        // Layered pane for main frame
         JLayeredPane layeredPane = getLayeredPane();
         layeredPane.setLayout(null);
 
@@ -32,11 +32,11 @@ public class MainDashboard extends JFrame {
         background.setBounds(0, 0, screenWidth, screenHeight);
         layeredPane.add(background, Integer.valueOf(1));
 
-        // Drawer panel
+        // Drawer panel with BoxLayout for content
         drawerPanel = new JPanel();
         drawerPanel.setLayout(new BoxLayout(drawerPanel, BoxLayout.Y_AXIS));
         drawerPanel.setBackground(new Color(44, 62, 80)); // #2C3E50
-        drawerPanel.setBounds(-drawerWidth, 0, drawerWidth, screenHeight);
+        drawerPanel.setBounds(0, 0, drawerWidth, screenHeight); // Start open
         layeredPane.add(drawerPanel, Integer.valueOf(2));
 
         // Profile info
@@ -55,56 +55,76 @@ public class MainDashboard extends JFrame {
         drawerPanel.add(emailLabel);
 
         // Drawer buttons in the recommended order
-        addDrawerButton("Dashboard", e -> {
-            // Already on Dashboard, just close drawer
-            closeDrawer();
+        addDrawerButton(drawerPanel, "Dashboard", e -> {
+            // Already on Dashboard, no action needed
         });
-        addDrawerButton("Inventory Management", e -> {
+        addDrawerButton(drawerPanel, "Inventory Management", e -> {
             new InventoryFrame();
-            closeDrawer();
+            // Removed closeDrawer() to keep drawer open
         });
-        addDrawerButton("Sales Entry", e -> {
+        addDrawerButton(drawerPanel, "Sales Entry", e -> {
             new SalesEntryFrame();
-            closeDrawer();
+            // Removed closeDrawer() to keep drawer open
         });
-        addDrawerButton("Customer Ledger", e -> {
+        addDrawerButton(drawerPanel, "Customer Ledger", e -> {
             new CustomerLedgerFrame();
-            closeDrawer();
+            // Removed closeDrawer() to keep drawer open
         });
-        addDrawerButton("Supplier Ledger", e -> {
+        addDrawerButton(drawerPanel, "Supplier Ledger", e -> {
             new SupplierLedgerFrame();
-            closeDrawer();
+            // Removed closeDrawer() to keep drawer open
         });
-        addDrawerButton("Customer Credit", e -> {
-            new CustomerCreditFrame();
-            closeDrawer();
-        });
-        addDrawerButton("Expenditure Tracking", e -> {
+
+        addDrawerButton(drawerPanel, "Expenditure Tracking", e -> {
             new ExpenditureTrackingFrame();
-            closeDrawer();
+            // Removed closeDrawer() to keep drawer open
         });
-        addDrawerButton("Profit Entry", e -> {
+        addDrawerButton(drawerPanel, "Profit Entry", e -> {
             new ProfitEntryFrame();
-            closeDrawer();
+            // Removed closeDrawer() to keep drawer open
         });
-        addDrawerButton("Sales Analysis", e -> {
+        addDrawerButton(drawerPanel, "Sales Analysis", e -> {
             new SalesAnalysisFrame();
-            closeDrawer();
+            // Removed closeDrawer() to keep drawer open
         });
-        addDrawerButton("Logout", e -> {
+        addDrawerButton(drawerPanel, "Logout", e -> {
             new AdminLogin();
             dispose();
         }, true); // Critical action
-        addDrawerButton("Exit", e -> System.exit(0), true); // Critical action
+        addDrawerButton(drawerPanel, "Exit", e -> System.exit(0), true); // Critical action
 
-        // Menu button
-        ImageIcon menuIcon = new ImageIcon(
-                new ImageIcon("resources/images/mainmenu.png").getImage().getScaledInstance(40, 40, Image.SCALE_SMOOTH));
-        menuButton = new JButton(menuIcon);
-        menuButton.setBounds(10, 10, 40, 40);
-        styleMenuButton(menuButton);
-        menuButton.addActionListener(e -> toggleDrawer());
-        layeredPane.add(menuButton, Integer.valueOf(3));
+
+        // Open button (top-left, pointing right, initially hidden)
+        openButton = new JButton("→");
+        openButton.setFont(new Font("Arial", Font.BOLD, 18));
+        openButton.setForeground(Color.WHITE);
+        openButton.setBackground(new Color(44, 62, 80)); // #2C3E50
+        openButton.setOpaque(true); // Ensure background is painted
+        openButton.setFocusPainted(false);
+        openButton.setBorder(BorderFactory.createEmptyBorder(5, 10, 5, 10));
+        openButton.setBounds(-40, 10, 40, 40); // Start off-screen
+        openButton.setVisible(true); // Explicitly set visible
+        openButton.addActionListener(e -> openDrawer());
+        openButton.addMouseListener(new MouseAdapter() {
+            @Override
+            public void mouseEntered(MouseEvent e) {
+                openButton.setBackground(new Color(41, 128, 185)); // #2980B9
+            }
+            @Override
+            public void mouseExited(MouseEvent e) {
+                openButton.setBackground(new Color(44, 62, 80)); // #2C3E50
+            }
+        });
+        layeredPane.add(openButton, Integer.valueOf(3));
+
+        // Force initial layout update
+        updateLayout();
+
+        // Ensure repaint after frame is visible
+        SwingUtilities.invokeLater(() -> {
+            layeredPane.revalidate();
+            layeredPane.repaint();
+        });
 
         // Resize listener
         addComponentListener(new ComponentAdapter() {
@@ -115,7 +135,7 @@ public class MainDashboard extends JFrame {
             }
         });
 
-        // Mouse click to close drawer
+        // Mouse click to close drawer (optional, can be removed if buttons suffice)
         addMouseListener(new MouseAdapter() {
             public void mouseClicked(MouseEvent e) {
                 if (isDrawerOpen && e.getX() > drawerWidth) {
@@ -123,27 +143,6 @@ public class MainDashboard extends JFrame {
                 }
             }
         });
-
-        // Placeholder database fetch (commented out, for future dashboard data)
-        /*
-        try {
-            Connection conn = DriverManager.getConnection("jdbc:mysql://localhost:3306/zaibautos", "root", "");
-            String sql = "SELECT COUNT(*) as total_sales FROM sales WHERE DATE(sale_date) = CURDATE()";
-            PreparedStatement stmt = conn.prepareStatement(sql);
-            ResultSet rs = stmt.executeQuery();
-            if (rs.next()) {
-                // Example: Display daily sales count on dashboard
-                // JLabel salesLabel = new JLabel("Today's Sales: " + rs.getInt("total_sales"));
-                // salesLabel.setBounds(100, 100, 200, 30);
-                // layeredPane.add(salesLabel, Integer.valueOf(2));
-            }
-            rs.close();
-            stmt.close();
-            conn.close();
-        } catch (SQLException ex) {
-            JOptionPane.showMessageDialog(this, "Database error: " + ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
-        }
-        */
 
         setVisible(true);
     }
@@ -154,15 +153,19 @@ public class MainDashboard extends JFrame {
                 .getImage().getScaledInstance(screenWidth, screenHeight, Image.SCALE_SMOOTH)));
         background.setBounds(0, 0, screenWidth, screenHeight);
 
-        // Resize drawer
+        // Resize drawer and buttons
         drawerPanel.setBounds(isDrawerOpen ? 0 : -drawerWidth, 0, drawerWidth, screenHeight);
+        openButton.setBounds(isDrawerOpen ? -40 : 10, 10, 40, 40);
+
+        revalidate();
+        repaint();
     }
 
-    private void addDrawerButton(String text, ActionListener action) {
-        addDrawerButton(text, action, false);
+    private void addDrawerButton(JPanel panel, String text, ActionListener action) {
+        addDrawerButton(panel, text, action, false);
     }
 
-    private void addDrawerButton(String text, ActionListener action, boolean isCritical) {
+    private void addDrawerButton(JPanel panel, String text, ActionListener action, boolean isCritical) {
         JButton button = new JButton(text);
         button.setFont(new Font("Segoe UI", Font.BOLD, 14));
         button.setForeground(isCritical ? new Color(231, 76, 60) : Color.WHITE); // #E74C3C for critical actions
@@ -183,31 +186,18 @@ public class MainDashboard extends JFrame {
                 button.setBackground(new Color(44, 62, 80)); // #2C3E50
             }
         });
-        drawerPanel.add(button);
-        drawerPanel.add(Box.createVerticalStrut(5)); // Spacing between buttons
-    }
-
-    private void styleMenuButton(JButton button) {
-        button.setContentAreaFilled(false);
-        button.setBorderPainted(false);
-        button.setFocusPainted(false);
-        button.setOpaque(false);
-    }
-
-    private void toggleDrawer() {
-        isDrawerOpen = !isDrawerOpen;
-        drawerPanel.setBounds(isDrawerOpen ? 0 : -drawerWidth, 0, drawerWidth, screenHeight);
-        updateLayout();
-        revalidate();
-        repaint();
+        panel.add(button);
+        panel.add(Box.createVerticalStrut(5)); // Spacing between buttons
     }
 
     private void closeDrawer() {
         isDrawerOpen = false;
-        drawerPanel.setBounds(-drawerWidth, 0, drawerWidth, screenHeight);
         updateLayout();
-        revalidate();
-        repaint();
+    }
+
+    private void openDrawer() {
+        isDrawerOpen = true;
+        updateLayout();
     }
 
     public static void main(String[] args) {

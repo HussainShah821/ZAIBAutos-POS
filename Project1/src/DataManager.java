@@ -1,5 +1,8 @@
-import java.util.ArrayList;
 import java.sql.*;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 
 public class DataManager {
     private static DataManager instance;
@@ -9,19 +12,24 @@ public class DataManager {
     private ArrayList<Expenditure> expenditures;
     private ArrayList<Sales> sales;
     private ArrayList<Profit> profits;
+    private Map<Integer, List<List<Object>>> customerLedgers; // Key: customerId, Value: List of [date, item, brand, type, uom, qty, price, total]
 
     // Customer class
     public static class Customer {
         int id;
         String name;
         String phone;
-        double balance;
+        double balance; // Maps to amountRemaining
+        double amountPaid;
+        double creditLimit;
 
-        Customer(int id, String name, String phone, double balance) {
+        Customer(int id, String name, String phone, double balance, double amountPaid, double creditLimit) {
             this.id = id;
             this.name = name;
             this.phone = phone;
             this.balance = balance;
+            this.amountPaid = amountPaid;
+            this.creditLimit = creditLimit;
         }
 
         @Override
@@ -136,10 +144,23 @@ public class DataManager {
         expenditures = new ArrayList<>();
         sales = new ArrayList<>();
         profits = new ArrayList<>();
+        customerLedgers = new HashMap<>();
 
         // Sample data
-        customers.add(new Customer(1, "John Doe", "1234567890", 5000.0));
-        customers.add(new Customer(2, "Jane Smith", "0987654321", 0.0));
+        customers.add(new Customer(1, "Ali Khan", "500-1234567", 2000.0, 5000.0, 10000.0));
+        customers.add(new Customer(2, "Sara Ahmed", "500-7654321", 500.0, 3000.0, 8000.0));
+        customers.add(new Customer(3, "Bilal Raza", "500-9876543", 0.0, 7000.0, 15000.0));
+
+        // Sample ledger entries for customers
+        customerLedgers.put(1, new ArrayList<>());
+        customerLedgers.get(1).add(List.of("21-05-2025", "Oil Filter", "Bosch", "Filter", "Unit", 2, 1500.0, 3000.0));
+
+        customerLedgers.put(2, new ArrayList<>());
+        customerLedgers.get(2).add(List.of("21-05-2025", "Brake Pads", "Toyota", "Brake", "Set", 1, 3000.0, 3000.0));
+
+        customerLedgers.put(3, new ArrayList<>());
+        customerLedgers.get(3).add(List.of("21-05-2025", "Air Filter", "Honda", "Filter", "Unit", 1, 1200.0, 1200.0));
+
         suppliers.add(new Supplier(1, "Auto Parts Ltd", "1112223334"));
         suppliers.add(new Supplier(2, "Motor Supplies", "4445556667"));
         products.add(new Product(1, "Oil Filter", "Bosch", 1500.0, "Filter", "Unit", 50));
@@ -155,16 +176,39 @@ public class DataManager {
             Connection conn = DriverManager.getConnection("jdbc:mysql://localhost:3306/zaibautos", "root", "");
 
             // Insert customers
-            String customerSql = "INSERT INTO customers (customer_id, name, phone, balance) VALUES (?, ?, ?, ?)";
+            String customerSql = "INSERT INTO customers (customer_id, name, phone, balance, amount_paid, credit_limit) VALUES (?, ?, ?, ?, ?, ?)";
             PreparedStatement customerStmt = conn.prepareStatement(customerSql);
             for (Customer c : customers) {
                 customerStmt.setInt(1, c.id);
                 customerStmt.setString(2, c.name);
                 customerStmt.setString(3, c.phone);
                 customerStmt.setDouble(4, c.balance);
+                customerStmt.setDouble(5, c.amountPaid);
+                customerStmt.setDouble(6, c.creditLimit);
                 customerStmt.executeUpdate();
             }
             customerStmt.close();
+
+            // Insert customer ledgers
+            String ledgerSql = "INSERT INTO customer_ledgers (customer_id, date, item, brand, type, uom, qty, price, total) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";
+            PreparedStatement ledgerStmt = conn.prepareStatement(ledgerSql);
+            for (Map.Entry<Integer, List<List<Object>>> entry : customerLedgers.entrySet()) {
+                int customerId = entry.getKey();
+                List<List<Object>> ledgerEntries = entry.getValue();
+                for (List<Object> ledgerEntry : ledgerEntries) {
+                    ledgerStmt.setInt(1, customerId);
+                    ledgerStmt.setString(2, (String) ledgerEntry.get(0)); // date
+                    ledgerStmt.setString(3, (String) ledgerEntry.get(1)); // item
+                    ledgerStmt.setString(4, (String) ledgerEntry.get(2)); // brand
+                    ledgerStmt.setString(5, (String) ledgerEntry.get(3)); // type
+                    ledgerStmt.setString(6, (String) ledgerEntry.get(4)); // uom
+                    ledgerStmt.setInt(7, (Integer) ledgerEntry.get(5));   // qty
+                    ledgerStmt.setDouble(8, (Double) ledgerEntry.get(6)); // price
+                    ledgerStmt.setDouble(9, (Double) ledgerEntry.get(7)); // total
+                    ledgerStmt.executeUpdate();
+                }
+            }
+            ledgerStmt.close();
 
             // Insert suppliers
             String supplierSql = "INSERT INTO suppliers (supplier_id, name, phone) VALUES (?, ?, ?)";
@@ -256,6 +300,23 @@ public class DataManager {
 
     public void addCustomer(Customer customer) {
         customers.add(customer);
+    }
+
+    // Ledger methods
+    public void addLedgerEntry(int customerId, String date, String item, String brand, String type, String uom, int qty, double price, double total) {
+        List<List<Object>> ledger = customerLedgers.getOrDefault(customerId, new ArrayList<>());
+        ledger.add(List.of(date, item, brand, type, uom, qty, price, total));
+        customerLedgers.put(customerId, ledger);
+
+        // Update customer's balance (amountRemaining)
+        Customer customer = customers.stream().filter(c -> c.id == customerId).findFirst().orElse(null);
+        if (customer != null) {
+            customer.balance += total;
+        }
+    }
+
+    public List<List<Object>> getCustomerLedger(int customerId) {
+        return customerLedgers.getOrDefault(customerId, new ArrayList<>());
     }
 
     // Supplier methods
