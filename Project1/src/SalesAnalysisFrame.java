@@ -11,6 +11,7 @@ import java.io.*;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Date;
+import java.util.List;
 
 public class SalesAnalysisFrame extends JFrame {
     private JTable salesTable;
@@ -20,6 +21,7 @@ public class SalesAnalysisFrame extends JFrame {
     private NumberFormat currencyFormat = NumberFormat.getCurrencyInstance(new Locale("en", "PK"));
     private Border defaultBorder, errorBorder;
     private static int nextSaleId = 1;
+    private static List<DataManager.Sales> dummySales = new ArrayList<>(); // Dummy data storage
 
     public SalesAnalysisFrame() {
         setTitle("Zaib Autos - Sales Analysis");
@@ -289,10 +291,8 @@ public class SalesAnalysisFrame extends JFrame {
                 double profit = sales - expenses;
                 double profitPercent = sales > 0 ? (profit / sales) * 100 : 0;
 
-                DataManager dataManager = DataManager.getInstance();
-                DataManager.Sales sale = new DataManager.Sales(nextSaleId++, date, sales, expenses);
-                dataManager.addSale(sale);
-
+                // Use dummy sales list instead of DataManager
+                dummySales.add(new DataManager.Sales(nextSaleId++, date, sales, expenses));
                 salesModel.addRow(new Object[]{date, sales, expenses, profit, profitPercent});
 
                 updateSummary();
@@ -322,8 +322,8 @@ public class SalesAnalysisFrame extends JFrame {
             Calendar refCal = Calendar.getInstance();
             refCal.setTime(refDate);
 
-            DataManager dataManager = DataManager.getInstance();
-            for (DataManager.Sales sale : dataManager.getSales()) {
+            // Use dummy sales instead of DataManager
+            for (DataManager.Sales sale : dummySales) {
                 Date entryDate = sdf.parse(sale.date);
                 Calendar entryCal = Calendar.getInstance();
                 entryCal.setTime(entryDate);
@@ -382,8 +382,7 @@ public class SalesAnalysisFrame extends JFrame {
         int confirm = JOptionPane.showConfirmDialog(this, "Clear all sales data?", "Confirmation",
                 JOptionPane.YES_NO_OPTION);
         if (confirm == JOptionPane.YES_OPTION) {
-            DataManager dataManager = DataManager.getInstance();
-            dataManager.clearSales();
+            dummySales.clear(); // Use dummy sales list instead of DataManager
             salesModel.setRowCount(0);
 
             updateSummary();
@@ -392,7 +391,6 @@ public class SalesAnalysisFrame extends JFrame {
     }
 
     private void exportReport() {
-        // File chooser for PDF save location
         JFileChooser fileChooser = new JFileChooser();
         fileChooser.setDialogTitle("Save Sales Report PDF");
         String defaultFileName = "SalesReport_" + LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss")) + ".pdf";
@@ -410,7 +408,7 @@ public class SalesAnalysisFrame extends JFrame {
 
         int userSelection = fileChooser.showSaveDialog(this);
         if (userSelection != JFileChooser.APPROVE_OPTION) {
-            return; // User cancelled
+            return;
         }
 
         File fileToSave = fileChooser.getSelectedFile();
@@ -418,25 +416,20 @@ public class SalesAnalysisFrame extends JFrame {
             fileToSave = new File(fileToSave.getAbsolutePath() + ".pdf");
         }
 
-        // Generate PDF using raw PDF syntax
         try (BufferedWriter writer = new BufferedWriter(new FileWriter(fileToSave))) {
-            // Basic PDF structure
             writer.write("%PDF-1.4\n");
             writer.write("1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n");
             writer.write("2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n");
             writer.write("3 0 obj\n<< /Type /Page /Parent 2 0 R /Resources << /Font << /F1 << /Type /Font /Subtype /Type1 /BaseFont /Helvetica >> >> >> /MediaBox [0 0 612 792] /Contents 4 0 R >>\nendobj\n");
             writer.write("4 0 obj\n<< /Length 5 0 R >>\nstream\n");
 
-            // Content stream (text positioning)
             writer.write("BT /F1 12 Tf 50 750 Td (ZAIB-AUTOS) Tj ET\n");
             writer.write("BT /F1 10 Tf 50 730 Td (GT.ROAD GHOTKI) Tj ET\n");
             writer.write("BT /F1 12 Tf 50 710 Td (SALES ANALYSIS REPORT) Tj ET\n");
 
-            // Date of generation
             String formattedDate = LocalDateTime.now().format(DateTimeFormatter.ofPattern("dd-MM-yyyy HH:mm:ss"));
             writer.write("BT /F1 10 Tf 50 690 Td (Generated on: " + formattedDate + ") Tj ET\n");
 
-            // Sales table
             int yPos = 670;
             writer.write("BT /F1 10 Tf 50 " + yPos + " Td (Sales Records:) Tj ET\n");
             yPos -= 20;
@@ -454,7 +447,6 @@ public class SalesAnalysisFrame extends JFrame {
                 yPos -= 20;
             }
 
-            // Summary section
             yPos -= 20;
             writer.write("BT /F1 10 Tf 50 " + yPos + " Td (Summary Statistics:) Tj ET\n");
             yPos -= 20;
@@ -485,7 +477,6 @@ public class SalesAnalysisFrame extends JFrame {
                     .replace(",", "");
             writer.write("BT /F1 10 Tf 50 " + yPos + " Td (" + yearlyText + ") Tj ET\n");
 
-            // End content stream
             writer.write("endstream\nendobj\n");
             writer.write("5 0 obj\n" + (yPos + 1000) + "\nendobj\n");
             writer.write("trailer\n<< /Root 1 0 R >>\n%%EOF\n");
@@ -500,7 +491,6 @@ public class SalesAnalysisFrame extends JFrame {
     }
 
     private void loadSampleData() {
-        DataManager dataManager = DataManager.getInstance();
         Calendar cal = Calendar.getInstance();
         SimpleDateFormat sdf = new SimpleDateFormat("dd-MM-yyyy");
 
@@ -513,9 +503,8 @@ public class SalesAnalysisFrame extends JFrame {
             double profit = sales - expenses;
             double profitPercent = sales > 0 ? (profit / sales) * 100 : 0;
 
-            DataManager.Sales sale = new DataManager.Sales(nextSaleId++, sdf.format(cal.getTime()), sales, expenses);
-            dataManager.addSale(sale);
-            salesModel.addRow(new Object[]{sale.date, sale.sales, sale.expenses, profit, profitPercent});
+            dummySales.add(new DataManager.Sales(nextSaleId++, sdf.format(cal.getTime()), sales, expenses));
+            salesModel.addRow(new Object[]{sdf.format(cal.getTime()), sales, expenses, profit, profitPercent});
         }
     }
 

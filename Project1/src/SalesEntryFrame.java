@@ -4,6 +4,7 @@ import javax.swing.border.EmptyBorder;
 import javax.swing.table.DefaultTableModel;
 import java.awt.*;
 import java.awt.event.*;
+import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.*;
 
@@ -11,7 +12,7 @@ public class SalesEntryFrame extends JFrame {
     private DefaultTableModel saleTableModel;
     private JTable saleTable;
     private JComboBox<String> productCombo;
-    private JTextField quantityField, priceField;
+    private JTextField quantityField, priceField, dateField;
     private Border defaultBorder, errorBorder;
     private double totalAmount = 0;
     private static int nextSaleNo = 1;
@@ -58,7 +59,7 @@ public class SalesEntryFrame extends JFrame {
         JPanel formPanel = createFormPanel();
         mainPanel.add(formPanel, BorderLayout.WEST);
 
-        saleTableModel = new DefaultTableModel(new String[]{"S.No", "Product", "Company", "Type", "UOM", "Quantity", "Price", "Total"}, 0);
+        saleTableModel = new DefaultTableModel(new String[]{"S.No", "Product", "Company", "Type", "UOM", "Quantity", "Price", "Total", "Date"}, 0);
         saleTable = new JTable(saleTableModel);
         saleTable.setFont(new Font("Segoe UI", Font.PLAIN, 14));
         saleTable.setRowHeight(25);
@@ -75,24 +76,22 @@ public class SalesEntryFrame extends JFrame {
         JButton returnItemButton = createStyledButton("Return Item");
         JButton clearButton = createStyledButton("Clear");
         JButton saveButton = createStyledButton("Save Sale");
-        JButton backButton = createStyledButton("Back");
+        JButton viewDailySalesButton = createStyledButton("View Daily Sales");
 
         addItemButton.addActionListener(e -> addSaleItem());
         removeItemButton.addActionListener(e -> removeSaleItem());
         returnItemButton.addActionListener(e -> returnItem());
         clearButton.addActionListener(e -> clearForm());
         saveButton.addActionListener(e -> saveSale());
-        backButton.addActionListener(e -> {
-            dispose();
-            new MainDashboard();
-        });
+        viewDailySalesButton.addActionListener(e -> viewDailySales());
+
 
         buttonPanel.add(addItemButton);
         buttonPanel.add(removeItemButton);
         buttonPanel.add(returnItemButton);
         buttonPanel.add(clearButton);
         buttonPanel.add(saveButton);
-        buttonPanel.add(backButton);
+        buttonPanel.add(viewDailySalesButton);
         mainPanel.add(buttonPanel, BorderLayout.SOUTH);
 
         add(mainPanel, BorderLayout.CENTER);
@@ -124,7 +123,7 @@ public class SalesEntryFrame extends JFrame {
         JPanel panel = new JPanel(new GridBagLayout());
         panel.setBackground(Color.WHITE);
         panel.setBorder(BorderFactory.createTitledBorder("Add Sale Item"));
-        panel.setPreferredSize(new Dimension(250, 150));
+        panel.setPreferredSize(new Dimension(250, 180)); // Increased height for date field
 
         GridBagConstraints gbc = new GridBagConstraints();
         gbc.insets = new Insets(5, 5, 5, 5);
@@ -134,12 +133,10 @@ public class SalesEntryFrame extends JFrame {
         gbc.gridx = 0; gbc.gridy = 0;
         panel.add(new JLabel("Product:"), gbc);
 
-        // Populate product combo with "Name (Company)"
         String[] productDisplayNames = productMap.keySet().toArray(new String[0]);
         productCombo = new JComboBox<>(productDisplayNames);
         productCombo.setFont(new Font("Segoe UI", Font.PLAIN, 14));
         productCombo.setToolTipText("Select a product");
-
         gbc.gridx = 1;
         panel.add(productCombo, gbc);
 
@@ -161,22 +158,29 @@ public class SalesEntryFrame extends JFrame {
         gbc.gridx = 1;
         panel.add(priceField, gbc);
 
+        gbc.gridx = 0; gbc.gridy = 3;
+        panel.add(new JLabel("Date:"), gbc);
+
+        dateField = new JTextField(new SimpleDateFormat("dd-MM-yyyy").format(new Date()));
+        dateField.setFont(new Font("Segoe UI", Font.PLAIN, 14));
+        dateField.setToolTipText("Enter date (dd-MM-yyyy), default is today");
+        gbc.gridx = 1;
+        panel.add(dateField, gbc);
+
         JLabel stockLabel = new JLabel("Stock: 0");
         productCombo.addActionListener(e -> {
             String selectedProduct = (String) productCombo.getSelectedItem();
             ProductDetails details = productMap.get(selectedProduct);
             stockLabel.setText("Stock: " + (details != null ? details.quantity : 0));
-            // Do not set priceField automatically; user will enter it manually
         });
 
-        gbc.gridx = 0; gbc.gridy = 3;
+        gbc.gridx = 0; gbc.gridy = 4;
         panel.add(stockLabel, gbc);
 
         return panel;
     }
 
     private void initializeProducts() {
-        // Dummy data for products (excluding price)
         productMap.put("Engine Oil (Castrol)", new ProductDetails("Engine Oil", "Castrol", "Oil", "Liters", 100));
         productMap.put("Brake Pad (Bosch)", new ProductDetails("Brake Pad", "Bosch", "Pad", "Pieces", 50));
         productMap.put("Air Filter (Mann)", new ProductDetails("Air Filter", "Mann", "Filter", "Pieces", 30));
@@ -215,6 +219,11 @@ public class SalesEntryFrame extends JFrame {
         try {
             int quantity = Integer.parseInt(quantityField.getText().trim());
             double price = Double.parseDouble(priceField.getText().trim());
+            String date = dateField.getText().trim();
+            SimpleDateFormat sdf = new SimpleDateFormat("dd-MM-yyyy");
+            sdf.setLenient(false);
+            sdf.parse(date); // Validate date format, will throw ParseException if invalid
+
             if (quantity <= 0) {
                 quantityField.setBorder(errorBorder);
                 JOptionPane.showMessageDialog(this, "Quantity must be greater than zero.", "Error", JOptionPane.ERROR_MESSAGE);
@@ -242,19 +251,25 @@ public class SalesEntryFrame extends JFrame {
                     product.uom,
                     quantity,
                     price,
-                    total
+                    total,
+                    date
             });
 
             product.quantity -= quantity;
             quantityField.setBorder(defaultBorder);
             priceField.setBorder(defaultBorder);
+            dateField.setBorder(defaultBorder);
             quantityField.setText("");
             priceField.setText("0");
+            dateField.setText(new SimpleDateFormat("dd-MM-yyyy").format(new Date())); // Reset to current date
 
         } catch (NumberFormatException ex) {
             quantityField.setBorder(errorBorder);
             priceField.setBorder(errorBorder);
             JOptionPane.showMessageDialog(this, "Invalid quantity or price. Please enter valid numbers.", "Error", JOptionPane.ERROR_MESSAGE);
+        } catch (ParseException ex) {
+            dateField.setBorder(errorBorder);
+            JOptionPane.showMessageDialog(this, "Invalid date format. Use dd-MM-yyyy (e.g., 07-06-2025).", "Error", JOptionPane.ERROR_MESSAGE);
         }
     }
 
@@ -328,9 +343,9 @@ public class SalesEntryFrame extends JFrame {
                 }
 
                 product.quantity += returnQuantity;
-                // Price for return is 0 since it's not relevant for stock adjustment
                 double price = 0;
-                double total = 0; // No monetary adjustment for return
+                double total = 0;
+                String date = new SimpleDateFormat("dd-MM-yyyy").format(new Date());
                 saleTableModel.addRow(new Object[]{
                         saleTableModel.getRowCount() + 1,
                         product.name,
@@ -339,7 +354,8 @@ public class SalesEntryFrame extends JFrame {
                         product.uom,
                         -returnQuantity,
                         price,
-                        total
+                        total,
+                        date
                 });
 
                 JOptionPane.showMessageDialog(dialog, "Item returned successfully!", "Success", JOptionPane.INFORMATION_MESSAGE);
@@ -369,8 +385,10 @@ public class SalesEntryFrame extends JFrame {
         totalAmount = 0;
         quantityField.setText("");
         priceField.setText("0");
+        dateField.setText(new SimpleDateFormat("dd-MM-yyyy").format(new Date()));
         quantityField.setBorder(defaultBorder);
         priceField.setBorder(defaultBorder);
+        dateField.setBorder(defaultBorder);
     }
 
     private void saveSale() {
@@ -388,6 +406,7 @@ public class SalesEntryFrame extends JFrame {
         //         int quantity = (int) saleTableModel.getValueAt(i, 5);
         //         double price = (double) saleTableModel.getValueAt(i, 6);
         //         double total = (double) saleTableModel.getValueAt(i, 7);
+        //         String saleDate = (String) saleTableModel.getValueAt(i, 8);
 
         //         // Find product_id
         //         int productId = -1;
@@ -400,12 +419,13 @@ public class SalesEntryFrame extends JFrame {
         //         }
 
         //         // Insert sale
-        //         pstmt = db.getConnection().prepareStatement("INSERT INTO Sales (sale_no, product_id, quantity, price, total, sale_date) VALUES (?, ?, ?, ?, ?, CURDATE())");
+        //         pstmt = db.getConnection().prepareStatement("INSERT INTO Sales (sale_no, product_id, quantity, price, total, sale_date) VALUES (?, ?, ?, ?, ?, ?)");
         //         pstmt.setInt(1, nextSaleNo);
         //         pstmt.setInt(2, productId);
         //         pstmt.setInt(3, quantity);
         //         pstmt.setDouble(4, price);
         //         pstmt.setDouble(5, total);
+        //         pstmt.setString(6, saleDate);
         //         pstmt.executeUpdate();
 
         //         // Update product stock
@@ -424,6 +444,42 @@ public class SalesEntryFrame extends JFrame {
         String saleDate = new SimpleDateFormat("dd-MM-yyyy").format(new Date());
         JOptionPane.showMessageDialog(this, "Sale saved successfully (database saving skipped)!", "Success", JOptionPane.INFORMATION_MESSAGE);
         clearForm();
+    }
+
+    private void viewDailySales() {
+        SimpleDateFormat sdf = new SimpleDateFormat("dd-MM-yyyy");
+        String currentDate = sdf.format(new Date());
+        DefaultTableModel dailyModel = new DefaultTableModel(new String[]{"S.No", "Product", "Company", "Type", "UOM", "Quantity", "Price", "Total", "Date"}, 0);
+
+        for (int i = 0; i < saleTableModel.getRowCount(); i++) {
+            String entryDate = (String) saleTableModel.getValueAt(i, 8);
+            if (entryDate.equals(currentDate)) {
+                dailyModel.addRow(new Object[]{
+                        dailyModel.getRowCount() + 1,
+                        saleTableModel.getValueAt(i, 1),
+                        saleTableModel.getValueAt(i, 2),
+                        saleTableModel.getValueAt(i, 3),
+                        saleTableModel.getValueAt(i, 4),
+                        saleTableModel.getValueAt(i, 5),
+                        saleTableModel.getValueAt(i, 6),
+                        saleTableModel.getValueAt(i, 7),
+                        saleTableModel.getValueAt(i, 8)
+                });
+            }
+        }
+
+        if (dailyModel.getRowCount() == 0) {
+            JOptionPane.showMessageDialog(this, "No sales recorded for today (" + currentDate + ").", "Info", JOptionPane.INFORMATION_MESSAGE);
+            return;
+        }
+
+        JTable dailyTable = new JTable(dailyModel);
+        dailyTable.setFont(new Font("Segoe UI", Font.PLAIN, 14));
+        dailyTable.setRowHeight(25);
+        dailyTable.setGridColor(new Color(200, 200, 200));
+        dailyTable.setShowGrid(true);
+        JScrollPane scrollPane = new JScrollPane(dailyTable);
+        JOptionPane.showMessageDialog(this, scrollPane, "Daily Sales - " + currentDate, JOptionPane.PLAIN_MESSAGE);
     }
 
     public static void main(String[] args) {

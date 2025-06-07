@@ -1,3 +1,4 @@
+
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
 import javax.swing.table.DefaultTableModel;
@@ -5,8 +6,14 @@ import javax.swing.table.TableRowSorter;
 import java.awt.*;
 import java.awt.event.*;
 import java.text.SimpleDateFormat;
+import java.util.Calendar;
 import java.util.Date;
 import java.sql.*;
+import org.jdatepicker.impl.JDatePanelImpl;
+import org.jdatepicker.impl.JDatePickerImpl;
+import org.jdatepicker.impl.UtilDateModel;
+import java.util.GregorianCalendar;
+import java.util.Properties;
 
 public class SupplierLedgerFrame extends JFrame {
     private final CardLayout cardLayout;
@@ -16,6 +23,8 @@ public class SupplierLedgerFrame extends JFrame {
     private JLabel supplierNameLabel, supplierPhoneLabel;
     private int selectedSupplierRow = -1;
     private static int nextBillNo = 1;
+    // New fields for totals
+    private JTextField totalDebitField, totalCreditField, totalRemainingBalanceField;
 
     public SupplierLedgerFrame() {
         setTitle("Zaib Autos - Supplier Ledger");
@@ -103,14 +112,9 @@ public class SupplierLedgerFrame extends JFrame {
 
         JButton addButton = createStyledButton("Add Supplier");
         JButton deleteButton = createStyledButton("Delete Supplier");
-        JButton backButton = createStyledButton("Back");
 
         addButton.addActionListener(e -> addSupplier());
         deleteButton.addActionListener(e -> deleteSupplier());
-        backButton.addActionListener(e -> {
-            dispose();
-            new MainDashboard();
-        });
 
         JPanel topPanel = new JPanel(new BorderLayout(5, 5));
         topPanel.setBackground(Color.WHITE);
@@ -120,7 +124,6 @@ public class SupplierLedgerFrame extends JFrame {
         buttonPanel.setBackground(Color.WHITE);
         buttonPanel.add(addButton);
         buttonPanel.add(deleteButton);
-        buttonPanel.add(backButton);
         topPanel.add(buttonPanel, BorderLayout.EAST);
 
         panel.add(topPanel, BorderLayout.NORTH);
@@ -135,33 +138,12 @@ public class SupplierLedgerFrame extends JFrame {
             }
         });
 
-        /*
-        try {
-            Connection conn = DriverManager.getConnection("jdbc:mysql://localhost:3306/zaibautos", "root", "");
-            String sql = "SELECT supplier_name, phone FROM suppliers";
-            PreparedStatement stmt = conn.prepareStatement(sql);
-            ResultSet rs = stmt.executeQuery();
-            supplierModel.setRowCount(0);
-            while (rs.next()) {
-                supplierModel.addRow(new Object[]{
-                    rs.getString("supplier_name"),
-                    rs.getString("phone")
-                });
-            }
-            rs.close();
-            stmt.close();
-            conn.close();
-        } catch (SQLException ex) {
-            JOptionPane.showMessageDialog(this, "Database error: " + ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
-        }
-        */
-
         return panel;
     }
 
     private JPanel supplierDetailPanel() {
         JPanel panel = new JPanel(new BorderLayout(10, 10));
-        panel.setBorder(new EmptyBorder(10, 10, 10, 10));
+        panel.setBorder(new EmptyBorder(10, 0, 10, 10));
         panel.setBackground(Color.WHITE);
 
         JPanel infoPanel = new JPanel(new GridLayout(2, 1, 5, 5));
@@ -174,8 +156,13 @@ public class SupplierLedgerFrame extends JFrame {
         infoPanel.add(supplierPhoneLabel);
 
         ledgerModel = new DefaultTableModel(new String[]{
-                "V No/Bill No", "Date", "Remarks", "Debit", "Credit", "Balance"
-        }, 0);
+                "V No/Bill No", "Date", "Remarks", "Debit", "Credit", "Remaining Balance"
+        }, 0) {
+            @Override
+            public boolean isCellEditable(int row, int column) {
+                return false;
+            }
+        };
         ledgerTable = new JTable(ledgerModel);
         ledgerTable.setFont(new Font("Arial", Font.PLAIN, 14));
         ledgerTable.setRowHeight(25);
@@ -183,21 +170,78 @@ public class SupplierLedgerFrame extends JFrame {
         ledgerTable.setShowGrid(true);
         JScrollPane tableScroll = new JScrollPane(ledgerTable);
 
-        JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
+        JPanel totalsPanel = new JPanel(new GridBagLayout());
+        totalsPanel.setBackground(Color.WHITE);
+        totalsPanel.setBorder(new EmptyBorder(5, 0, 5, 0));
+
+        GridBagConstraints gbc = new GridBagConstraints();
+        gbc.insets = new Insets(0, 0, 5, 10);
+        gbc.anchor = GridBagConstraints.WEST;
+
+        gbc.gridx = 0;
+        gbc.gridy = 0;
+        JLabel totalDebitLabel = new JLabel("Total Debit:");
+        totalDebitLabel.setFont(new Font("Arial", Font.BOLD, 14));
+        totalsPanel.add(totalDebitLabel, gbc);
+
+        gbc.gridx = 1;
+        gbc.anchor = GridBagConstraints.EAST;
+        totalDebitField = new JTextField("0.00");
+        totalDebitField.setFont(new Font("Arial", Font.PLAIN, 14));
+        totalDebitField.setEditable(false);
+        totalDebitField.setHorizontalAlignment(JTextField.RIGHT);
+        totalDebitField.setMinimumSize(new Dimension(120, 25));
+        totalDebitField.setPreferredSize(new Dimension(120, 25));
+        totalsPanel.add(totalDebitField, gbc);
+
+        gbc.gridx = 0;
+        gbc.gridy = 1;
+        gbc.anchor = GridBagConstraints.WEST;
+        JLabel totalCreditLabel = new JLabel("Total Credit:");
+        totalCreditLabel.setFont(new Font("Arial", Font.BOLD, 14));
+        totalsPanel.add(totalCreditLabel, gbc);
+
+        gbc.gridx = 1;
+        gbc.anchor = GridBagConstraints.EAST;
+        totalCreditField = new JTextField("0.00");
+        totalCreditField.setFont(new Font("Arial", Font.PLAIN, 14));
+        totalCreditField.setEditable(false);
+        totalCreditField.setHorizontalAlignment(JTextField.RIGHT);
+        totalCreditField.setMinimumSize(new Dimension(120, 25));
+        totalCreditField.setPreferredSize(new Dimension(120, 25));
+        totalsPanel.add(totalCreditField, gbc);
+
+        gbc.gridx = 0;
+        gbc.gridy = 2;
+        gbc.anchor = GridBagConstraints.WEST;
+        JLabel totalRemainingLabel = new JLabel("Total Remaining:");
+        totalRemainingLabel.setFont(new Font("Arial", Font.BOLD, 14));
+        totalsPanel.add(totalRemainingLabel, gbc);
+
+        gbc.gridx = 1;
+        gbc.anchor = GridBagConstraints.EAST;
+        totalRemainingBalanceField = new JTextField("0.00");
+        totalRemainingBalanceField.setFont(new Font("Arial", Font.PLAIN, 14));
+        totalRemainingBalanceField.setEditable(false);
+        totalRemainingBalanceField.setHorizontalAlignment(JTextField.RIGHT);
+        totalRemainingBalanceField.setMinimumSize(new Dimension(120, 25));
+        totalRemainingBalanceField.setPreferredSize(new Dimension(120, 25));
+        totalsPanel.add(totalRemainingBalanceField, gbc);
+
+        JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.CENTER));
         buttonPanel.setBackground(Color.WHITE);
         JButton addEntryButton = createStyledButton("Add Entry");
+        JButton updateEntryButton = createStyledButton("Update Credit/Debit");
         JButton deleteEntryButton = createStyledButton("Delete Entry");
         JButton generateInvoiceButton = createStyledButton("Generate Invoice");
         JButton backButton = createStyledButton("Back to Suppliers");
 
         addEntryButton.addActionListener(e -> addSupplierEntry());
+        updateEntryButton.addActionListener(e -> updateSupplierEntry());
         deleteEntryButton.addActionListener(e -> deleteSupplierEntry());
         generateInvoiceButton.addActionListener(e -> {
             if (ledgerModel.getRowCount() > 0) {
-                String supplierName = supplierNameLabel.getText().replace("Supplier: ", "");
-                String phone = supplierPhoneLabel.getText().replace("Phone: ", "");
-                InvoiceGenerator invoiceGenerator = new InvoiceGenerator(ledgerModel, supplierName, phone);
-                invoiceGenerator.setVisible(true);
+                showDateRangeDialog(ledgerModel);
             } else {
                 JOptionPane.showMessageDialog(this, "No entries to generate invoice", "Error", JOptionPane.ERROR_MESSAGE);
             }
@@ -205,15 +249,165 @@ public class SupplierLedgerFrame extends JFrame {
         backButton.addActionListener(e -> cardLayout.show(mainPanel, "List"));
 
         buttonPanel.add(addEntryButton);
+        buttonPanel.add(updateEntryButton);
         buttonPanel.add(deleteEntryButton);
         buttonPanel.add(generateInvoiceButton);
         buttonPanel.add(backButton);
 
         panel.add(infoPanel, BorderLayout.NORTH);
         panel.add(tableScroll, BorderLayout.CENTER);
-        panel.add(buttonPanel, BorderLayout.SOUTH);
+        JPanel southPanel = new JPanel(new BorderLayout());
+        southPanel.setBackground(Color.WHITE);
+        southPanel.add(totalsPanel, BorderLayout.NORTH);
+        southPanel.add(buttonPanel, BorderLayout.SOUTH);
+        panel.add(southPanel, BorderLayout.SOUTH);
 
         return panel;
+    }
+
+    private void showDateRangeDialog(DefaultTableModel ledgerModel) {
+        JDialog dateDialog = new JDialog(this, "Select Date Range", true);
+        dateDialog.setSize(450, 200); // Increased height for better spacing
+        dateDialog.setLocationRelativeTo(this);
+
+        // Use GridBagLayout for flexible spacing
+        dateDialog.setLayout(new GridBagLayout());
+        GridBagConstraints gbc = new GridBagConstraints();
+        gbc.insets = new Insets(10, 10, 10, 10); // Padding around all components
+        gbc.fill = GridBagConstraints.HORIZONTAL;
+
+        // Initialize date pickers
+        UtilDateModel startModel = new UtilDateModel();
+        UtilDateModel endModel = new UtilDateModel();
+        Calendar calendar = Calendar.getInstance();
+        calendar.set(2025, Calendar.JUNE, 7, 20, 14); // June 07, 2025, 08:14 PM PKT (current time)
+        endModel.setValue(calendar.getTime());
+
+        Properties dateProps = new Properties();
+        dateProps.put("text.today", "Today");
+        dateProps.put("text.month", "Month");
+        dateProps.put("text.year", "Year");
+
+        JDatePanelImpl startDatePanel = new JDatePanelImpl(startModel, dateProps);
+        JDatePanelImpl endDatePanel = new JDatePanelImpl(endModel, dateProps);
+
+        JDatePickerImpl startDatePicker = new JDatePickerImpl(startDatePanel, new DateLabelFormatter());
+        JDatePickerImpl endDatePicker = new JDatePickerImpl(endDatePanel, new DateLabelFormatter());
+
+        // Add labels and pickers with spacing
+        gbc.gridx = 0;
+        gbc.gridy = 0;
+        gbc.anchor = GridBagConstraints.WEST;
+        dateDialog.add(new JLabel("Start Date:"), gbc);
+
+        gbc.gridx = 1;
+        gbc.gridy = 0;
+        gbc.anchor = GridBagConstraints.WEST;
+        dateDialog.add(startDatePicker, gbc);
+
+        gbc.gridx = 0;
+        gbc.gridy = 1;
+        gbc.anchor = GridBagConstraints.WEST;
+        dateDialog.add(new JLabel("End Date:"), gbc);
+
+        gbc.gridx = 1;
+        gbc.gridy = 1;
+        gbc.anchor = GridBagConstraints.WEST;
+        dateDialog.add(endDatePicker, gbc);
+
+        // Add buttons with spacing
+        JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.CENTER, 10, 10)); // Horizontal and vertical gaps
+        JButton okButton = new JButton("OK");
+        JButton cancelButton = new JButton("Cancel");
+        okButton.addActionListener(e -> {
+            Object startValue = startDatePicker.getModel().getValue();
+            Object endValue = endDatePicker.getModel().getValue();
+            Date startDate = startValue != null ? (startValue instanceof GregorianCalendar ? ((GregorianCalendar) startValue).getTime() : (Date) startValue) : null;
+            Date endDate = endValue != null ? (endValue instanceof GregorianCalendar ? ((GregorianCalendar) endValue).getTime() : (Date) endValue) : null;
+
+            if (startDate == null || endDate == null) {
+                JOptionPane.showMessageDialog(dateDialog, "Please select both dates.", "Error", JOptionPane.ERROR_MESSAGE);
+                return;
+            }
+
+            if (startDate.after(endDate)) {
+                JOptionPane.showMessageDialog(dateDialog, "Start date cannot be after end date.", "Error", JOptionPane.ERROR_MESSAGE);
+                return;
+            }
+
+            System.out.println("Start Date: " + new SimpleDateFormat("dd-MM-yyyy").format(startDate));
+            System.out.println("End Date: " + new SimpleDateFormat("dd-MM-yyyy").format(endDate));
+            DefaultTableModel filteredModel = filterLedgerByDateRange(ledgerModel, startDate, endDate);
+            String supplierName = supplierNameLabel.getText().replace("Supplier: ", "");
+            String phone = supplierPhoneLabel.getText().replace("Phone: ", "");
+            InvoiceGenerator invoiceGenerator = new InvoiceGenerator(filteredModel, supplierName, phone, startDate, endDate); // Updated line
+            invoiceGenerator.setVisible(true);
+            invoiceGenerator.toFront();
+            invoiceGenerator.requestFocus();
+            invoiceGenerator.setAlwaysOnTop(true); // Optional: Forces the window to stay on top
+            dateDialog.dispose();
+        });
+
+        cancelButton.addActionListener(e -> dateDialog.dispose());
+
+        buttonPanel.add(okButton);
+        buttonPanel.add(cancelButton);
+
+        gbc.gridx = 0;
+        gbc.gridy = 2;
+        gbc.gridwidth = 2; // Span across both columns
+        gbc.anchor = GridBagConstraints.CENTER;
+        dateDialog.add(buttonPanel, gbc);
+
+        dateDialog.setVisible(true);
+    }
+
+    private DefaultTableModel filterLedgerByDateRange(DefaultTableModel ledgerModel, Date startDate, Date endDate) {
+        DefaultTableModel filteredModel = new DefaultTableModel(new String[]{
+                "V No/Bill No", "Date", "Remarks", "Debit", "Credit", "Remaining Balance"
+        }, 0) {
+            @Override
+            public boolean isCellEditable(int row, int column) {
+                return false;
+            }
+        };
+
+        SimpleDateFormat dateFormat = new SimpleDateFormat("dd-MM-yyyy");
+        for (int i = 0; i < ledgerModel.getRowCount(); i++) {
+            try {
+                String dateStr = ledgerModel.getValueAt(i, 1).toString();
+                Date entryDate = dateFormat.parse(dateStr);
+
+                if (!entryDate.before(startDate) && !entryDate.after(endDate)) {
+                    filteredModel.addRow(new Object[]{
+                            ledgerModel.getValueAt(i, 0),
+                            ledgerModel.getValueAt(i, 1),
+                            ledgerModel.getValueAt(i, 2),
+                            ledgerModel.getValueAt(i, 3),
+                            ledgerModel.getValueAt(i, 4),
+                            ledgerModel.getValueAt(i, 5)
+                    });
+                }
+            } catch (Exception e) {
+                // Skip entries with invalid dates
+            }
+        }
+
+        return filteredModel;
+    }
+
+    private void updateTotals() {
+        double totalDebit = 0.0;
+        double totalCredit = 0.0;
+        double totalRemainingBalance = 0.0;
+        for (int i = 0; i < ledgerModel.getRowCount(); i++) {
+            totalDebit += (Double) ledgerModel.getValueAt(i, 3);
+            totalCredit += (Double) ledgerModel.getValueAt(i, 4);
+            totalRemainingBalance += (Double) ledgerModel.getValueAt(i, 5);
+        }
+        totalDebitField.setText(String.format("%.2f", totalDebit));
+        totalCreditField.setText(String.format("%.2f", totalCredit));
+        totalRemainingBalanceField.setText(String.format("%.2f", totalRemainingBalance));
     }
 
     private void showSupplierDetailPanel() {
@@ -223,36 +417,25 @@ public class SupplierLedgerFrame extends JFrame {
         supplierPhoneLabel.setText("Phone: " + supplier.phone);
 
         ledgerModel.setRowCount(0);
-        ledgerModel.addRow(new Object[]{"SUP-001", new SimpleDateFormat("dd-MM-yyyy").format(new Date()), "Initial balance", "0", "1000", "1000"});
-        ledgerModel.addRow(new Object[]{"SUP-002", new SimpleDateFormat("dd-MM-yyyy").format(new Date()), "Purchase", "500", "0", "500"});
 
-        /*
-        try {
-            Connection conn = DriverManager.getConnection("jdbc:mysql://localhost:3306/zaibautos", "root", "");
-            String sql = "SELECT bill_no, entry_date, remarks, debit, credit, balance " +
-                         "FROM supplier_ledger WHERE supplier_id = ?";
-            PreparedStatement stmt = conn.prepareStatement(sql);
-            stmt.setInt(1, supplier.id);
-            ResultSet rs = stmt.executeQuery();
-            ledgerModel.setRowCount(0);
-            while (rs.next()) {
-                ledgerModel.addRow(new Object[]{
-                    rs.getString("bill_no"),
-                    new SimpleDateFormat("dd-MM-yyyy").format(rs.getDate("entry_date")),
-                    rs.getString("remarks"),
-                    rs.getDouble("debit"),
-                    rs.getDouble("credit"),
-                    rs.getDouble("balance")
-                });
-            }
-            rs.close();
-            stmt.close();
-            conn.close();
-        } catch (SQLException ex) {
-            JOptionPane.showMessageDialog(this, "Database error: " + ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
+        Object[][] dummyData = {
+                {"SUP-001", "01-06-2025", "Initial balance", 0.0, 1000.0, -1000.0},
+                {"SUP-002", "02-06-2025", "Purchase", 500.0, 0.0, -1500.0},
+                {"SUP-003", "03-06-2025", "Payment", 0.0, 300.0, -1200.0},
+                {"SUP-004", "04-06-2025", "Purchase", 700.0, 0.0, -1900.0},
+                {"SUP-005", "05-06-2025", "Payment", 0.0, 400.0, -1500.0},
+                {"SUP-006", "06-06-2025", "Purchase", 600.0, 0.0, -2100.0},
+                {"SUP-007", "07-06-2025", "Payment", 0.0, 500.0, -1600.0}
+        };
+
+        for (Object[] row : dummyData) {
+            double debit = (Double) row[3];
+            double credit = (Double) row[4];
+            double remainingBalance = (Double) row[5]; // Using pre-calculated remaining balance
+            ledgerModel.addRow(new Object[]{row[0], row[1], row[2], debit, credit, remainingBalance});
         }
-        */
 
+        updateTotals();
         cardLayout.show(mainPanel, "Detail");
     }
 
@@ -289,21 +472,6 @@ public class SupplierLedgerFrame extends JFrame {
             DataManager.Supplier newSupplier = new DataManager.Supplier(dataManager.getSuppliers().size() + 1, supplierName, supplierPhone);
             dataManager.addSupplier(newSupplier);
             supplierModel.addRow(new Object[]{supplierName, supplierPhone});
-
-            /*
-            try {
-                Connection conn = DriverManager.getConnection("jdbc:mysql://localhost:3306/zaibautos", "root", "");
-                String sql = "INSERT INTO suppliers (supplier_name, phone) VALUES (?, ?)";
-                PreparedStatement stmt = conn.prepareStatement(sql);
-                stmt.setString(1, supplierName);
-                stmt.setString(2, supplierPhone);
-                stmt.executeUpdate();
-                stmt.close();
-                conn.close();
-            } catch (SQLException ex) {
-                JOptionPane.showMessageDialog(this, "Database error: " + ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
-            }
-            */
         }
     }
 
@@ -315,20 +483,6 @@ public class SupplierLedgerFrame extends JFrame {
                 DataManager dataManager = DataManager.getInstance();
                 dataManager.getSuppliers().remove(selectedRow);
                 supplierModel.removeRow(selectedRow);
-
-                /*
-                try {
-                    Connection conn = DriverManager.getConnection("jdbc:mysql://localhost:3306/zaibautos", "root", "");
-                    String sql = "DELETE FROM suppliers WHERE supplier_name = ?";
-                    PreparedStatement stmt = conn.prepareStatement(sql);
-                    stmt.setString(1, supplierModel.getValueAt(selectedRow, 0).toString());
-                    stmt.executeUpdate();
-                    stmt.close();
-                    conn.close();
-                } catch (SQLException ex) {
-                    JOptionPane.showMessageDialog(this, "Database error: " + ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
-                }
-                */
             }
         } else {
             JOptionPane.showMessageDialog(this, "Please select a supplier to delete.", "Error", JOptionPane.ERROR_MESSAGE);
@@ -343,9 +497,8 @@ public class SupplierLedgerFrame extends JFrame {
         JTextField remarks = new JTextField();
         JTextField debit = new JTextField("0");
         JTextField credit = new JTextField("0");
-        JTextField balance = new JTextField("0");
 
-        JPanel panel = new JPanel(new GridLayout(6, 2, 5, 5));
+        JPanel panel = new JPanel(new GridLayout(5, 2, 5, 5));
         panel.setBorder(new EmptyBorder(10, 10, 10, 10));
         panel.add(new JLabel("Bill No:"));
         panel.add(billNo);
@@ -357,68 +510,72 @@ public class SupplierLedgerFrame extends JFrame {
         panel.add(debit);
         panel.add(new JLabel("Credit:"));
         panel.add(credit);
-        panel.add(new JLabel("Balance:"));
-        panel.add(balance);
-
-        /*
-        try {
-            Connection conn = DriverManager.getConnection("jdbc:mysql://localhost:3306/zaibautos", "root", "");
-            String sql = "SELECT MAX(entry_id) + 1 AS next_id FROM supplier_ledger";
-            PreparedStatement stmt = conn.prepareStatement(sql);
-            ResultSet rs = stmt.executeQuery();
-            int nextId = rs.next() ? rs.getInt("next_id") : 1;
-            billNo.setText(String.format("SUP-%03d", nextId));
-            rs.close();
-            stmt.close();
-            conn.close();
-        } catch (SQLException ex) {
-            JOptionPane.showMessageDialog(this, "Database error: " + ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
-        }
-        */
 
         int result = JOptionPane.showConfirmDialog(this, panel, "Add Supplier Entry", JOptionPane.OK_CANCEL_OPTION, JOptionPane.PLAIN_MESSAGE);
         if (result == JOptionPane.OK_OPTION) {
             try {
                 double debitVal = Double.parseDouble(debit.getText().trim());
                 double creditVal = Double.parseDouble(credit.getText().trim());
-                double balanceVal = Double.parseDouble(balance.getText().trim());
-                if (debitVal < 0 || creditVal < 0 || balanceVal < 0) {
-                    JOptionPane.showMessageDialog(this, "Debit, Credit, and Balance must be non-negative.", "Error", JOptionPane.ERROR_MESSAGE);
+                if (debitVal < 0 || creditVal < 0) {
+                    JOptionPane.showMessageDialog(this, "Debit and Credit must be non-negative.", "Error", JOptionPane.ERROR_MESSAGE);
                     return;
                 }
+
+                double remainingBalance = debitVal - creditVal;
                 ledgerModel.addRow(new Object[]{
                         billNo.getText(),
                         date.getText(),
                         remarks.getText(),
                         debitVal,
                         creditVal,
-                        balanceVal
+                        remainingBalance
                 });
 
-                /*
-                try {
-                    Connection conn = DriverManager.getConnection("jdbc:mysql://localhost:3306/zaibautos", "root", "");
-                    String sql = "INSERT INTO supplier_ledger (supplier_id, bill_no, entry_date, remarks, debit, credit, balance) " +
-                                 "VALUES (?, ?, ?, ?, ?, ?, ?)";
-                    PreparedStatement stmt = conn.prepareStatement(sql);
-                    DataManager dataManager = DataManager.getInstance();
-                    stmt.setInt(1, dataManager.getSuppliers().get(selectedSupplierRow).id);
-                    stmt.setString(2, billNo.getText());
-                    stmt.setString(3, date.getText());
-                    stmt.setString(4, remarks.getText());
-                    stmt.setDouble(5, debitVal);
-                    stmt.setDouble(6, creditVal);
-                    stmt.setDouble(7, balanceVal);
-                    stmt.executeUpdate();
-                    stmt.close();
-                    conn.close();
-                } catch (SQLException ex) {
-                    JOptionPane.showMessageDialog(this, "Database error: " + ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
-                }
-                */
+                updateTotals();
             } catch (NumberFormatException ex) {
-                JOptionPane.showMessageDialog(this, "Invalid number format for Debit, Credit, or Balance.", "Error", JOptionPane.ERROR_MESSAGE);
+                JOptionPane.showMessageDialog(this, "Invalid number format for Debit or Credit.", "Error", JOptionPane.ERROR_MESSAGE);
             }
+        }
+    }
+
+    private void updateSupplierEntry() {
+        int selected = ledgerTable.getSelectedRow();
+        if (selected != -1) {
+            double currentDebit = (Double) ledgerModel.getValueAt(selected, 3);
+            double currentCredit = (Double) ledgerModel.getValueAt(selected, 4);
+
+            JTextField debit = new JTextField(String.valueOf(currentDebit));
+            JTextField credit = new JTextField(String.valueOf(currentCredit));
+
+            JPanel panel = new JPanel(new GridLayout(2, 2, 5, 5));
+            panel.setBorder(new EmptyBorder(10, 10, 10, 10));
+            panel.add(new JLabel("Debit:"));
+            panel.add(debit);
+            panel.add(new JLabel("Credit:"));
+            panel.add(credit);
+
+            int result = JOptionPane.showConfirmDialog(this, panel, "Update Credit/Debit", JOptionPane.OK_CANCEL_OPTION);
+            if (result == JOptionPane.OK_OPTION) {
+                try {
+                    double debitVal = Double.parseDouble(debit.getText().trim());
+                    double creditVal = Double.parseDouble(credit.getText().trim());
+                    if (debitVal < 0 || creditVal < 0) {
+                        JOptionPane.showMessageDialog(this, "Debit and Credit must be non-negative.", "Error", JOptionPane.ERROR_MESSAGE);
+                        return;
+                    }
+
+                    double remainingBalance = debitVal - creditVal;
+                    ledgerModel.setValueAt(debitVal, selected, 3);
+                    ledgerModel.setValueAt(creditVal, selected, 4);
+                    ledgerModel.setValueAt(remainingBalance, selected, 5);
+
+                    updateTotals();
+                } catch (NumberFormatException ex) {
+                    JOptionPane.showMessageDialog(this, "Invalid number format for Debit or Credit.", "Error", JOptionPane.ERROR_MESSAGE);
+                }
+            }
+        } else {
+            JOptionPane.showMessageDialog(this, "Please select an entry to update.", "Error", JOptionPane.ERROR_MESSAGE);
         }
     }
 
@@ -428,24 +585,8 @@ public class SupplierLedgerFrame extends JFrame {
             int confirm = JOptionPane.showConfirmDialog(this, "Delete selected entry?", "Confirm", JOptionPane.YES_NO_OPTION);
             if (confirm == JOptionPane.YES_OPTION) {
                 String billNo = ledgerModel.getValueAt(selected, 0).toString();
-
-                /*
-                try {
-                    Connection conn = DriverManager.getConnection("jdbc:mysql://localhost:3306/zaibautos", "root", "");
-                    String sql = "DELETE FROM supplier_ledger WHERE bill_no = ? AND supplier_id = ?";
-                    PreparedStatement stmt = conn.prepareStatement(sql);
-                    DataManager dataManager = DataManager.getInstance();
-                    stmt.setString(1, billNo);
-                    stmt.setInt(2, dataManager.getSuppliers().get(selectedSupplierRow).id);
-                    stmt.executeUpdate();
-                    stmt.close();
-                    conn.close();
-                })": {
-                    JOptionPane.showMessageDialog(this, "Database error: " + ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
-                }
-                */
-
                 ledgerModel.removeRow(selected);
+                updateTotals();
             }
         } else {
             JOptionPane.showMessageDialog(this, "Please select an entry to delete.", "Error", JOptionPane.ERROR_MESSAGE);
@@ -454,5 +595,26 @@ public class SupplierLedgerFrame extends JFrame {
 
     public static void main(String[] args) {
         SwingUtilities.invokeLater(SupplierLedgerFrame::new);
+    }
+}
+
+// Formatter for JDatePicker
+class DateLabelFormatter extends JFormattedTextField.AbstractFormatter {
+    private final SimpleDateFormat dateFormat = new SimpleDateFormat("dd-MM-yyyy");
+
+    @Override
+    public Object stringToValue(String text) throws java.text.ParseException {
+        return dateFormat.parse(text);
+    }
+
+    @Override
+    public String valueToString(Object value) throws java.text.ParseException {
+        if (value == null) return "";
+        if (value instanceof java.util.GregorianCalendar) {
+            return dateFormat.format(((GregorianCalendar) value).getTime());
+        } else if (value instanceof java.util.Date) {
+            return dateFormat.format((Date) value);
+        }
+        return "";
     }
 }
