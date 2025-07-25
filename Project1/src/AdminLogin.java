@@ -4,6 +4,7 @@ import java.awt.*;
 import java.awt.event.*;
 import java.awt.geom.RoundRectangle2D;
 import javax.swing.*;
+import java.sql.*;
 
 class RoundedTextField extends JTextField {
     private final int radius;
@@ -52,7 +53,6 @@ class RoundedPasswordField extends JPasswordField {
         setForeground(Color.BLACK);
         setBorder(BorderFactory.createEmptyBorder(8, 12, 8, 12));
         setEchoChar('*');
-
     }
 
     @Override
@@ -137,8 +137,6 @@ class RoundedButton extends JButton {
 }
 
 public class AdminLogin extends JFrame {
-    private String userName = "admin";
-    private String password = "admin";
     private final String mpin = "123";
 
     public AdminLogin() {
@@ -266,11 +264,21 @@ public class AdminLogin extends JFrame {
     }
 
     private void login(JTextField userField, JPasswordField passwordField) {
-        if (userField.getText().equals(userName) && new String(passwordField.getPassword()).equals(password)) {
-            new MainDashboard(); // Your Dashboard class
-            dispose();
-        } else {
-            JOptionPane.showMessageDialog(this, "Incorrect Username or Password", "Error", JOptionPane.ERROR_MESSAGE);
+        DatabaseConnection dbConn = DatabaseConnection.getInstance("root","root");
+        try (Connection conn = dbConn.getConnection();
+             PreparedStatement stmt = conn.prepareStatement("SELECT * FROM users WHERE username = ? AND password = ?")) {
+            stmt.setString(1, userField.getText());
+            stmt.setString(2, new String(passwordField.getPassword()));
+            ResultSet rs = stmt.executeQuery();
+            if (rs.next()) {
+                new MainDashboard(); // Your Dashboard class
+                dispose();
+            } else {
+                JOptionPane.showMessageDialog(this, "Incorrect Username or Password", "Error", JOptionPane.ERROR_MESSAGE);
+            }
+        } catch (SQLException e) {
+            System.err.println("Login error: " + e.getMessage());
+            JOptionPane.showMessageDialog(this, "Database connection failed!", "Error", JOptionPane.ERROR_MESSAGE);
         }
     }
 
@@ -280,9 +288,22 @@ public class AdminLogin extends JFrame {
             String newUser = JOptionPane.showInputDialog(this, "New Username:");
             String newPass = JOptionPane.showInputDialog(this, "New Password:");
             if (newUser != null && !newUser.isEmpty() && newPass != null && !newPass.isEmpty()) {
-                userName = newUser;
-                password = newPass;
-                JOptionPane.showMessageDialog(this, "Username and Password updated successfully!");
+                DatabaseConnection dbConn = DatabaseConnection.getInstance("root", "root");
+                try (Connection conn = dbConn.getConnection();
+                     PreparedStatement stmt = conn.prepareStatement("UPDATE users SET username = ?, password = ? WHERE username = ?")) {
+                    stmt.setString(1, newUser);
+                    stmt.setString(2, newPass);
+                    stmt.setString(3, "admin"); // Update the default admin
+                    int rowsAffected = stmt.executeUpdate();
+                    if (rowsAffected > 0) {
+                        JOptionPane.showMessageDialog(this, "Username and Password updated successfully!");
+                    } else {
+                        JOptionPane.showMessageDialog(this, "Update failed. Admin user not found.", "Error", JOptionPane.ERROR_MESSAGE);
+                    }
+                } catch (SQLException e) {
+                    System.err.println("Update error: " + e.getMessage());
+                    JOptionPane.showMessageDialog(this, "Database update failed!", "Error", JOptionPane.ERROR_MESSAGE);
+                }
             } else {
                 JOptionPane.showMessageDialog(this, "Fields cannot be empty.", "Error", JOptionPane.ERROR_MESSAGE);
             }
@@ -293,5 +314,5 @@ public class AdminLogin extends JFrame {
 
     public static void main(String[] args) {
         SwingUtilities.invokeLater(AdminLogin::new);
-}
+    }
 }

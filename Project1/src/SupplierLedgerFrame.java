@@ -1,14 +1,13 @@
-
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
 import javax.swing.table.DefaultTableModel;
 import javax.swing.table.TableRowSorter;
 import java.awt.*;
 import java.awt.event.*;
+import java.sql.*;
 import java.text.SimpleDateFormat;
 import java.util.Calendar;
 import java.util.Date;
-import java.sql.*;
 import org.jdatepicker.impl.JDatePanelImpl;
 import org.jdatepicker.impl.JDatePickerImpl;
 import org.jdatepicker.impl.UtilDateModel;
@@ -21,10 +20,12 @@ public class SupplierLedgerFrame extends JFrame {
     private JTable supplierTable, ledgerTable;
     private DefaultTableModel supplierModel, ledgerModel;
     private JLabel supplierNameLabel, supplierPhoneLabel;
-    private int selectedSupplierRow = -1;
-    private static int nextBillNo = 1;
-    // New fields for totals
     private JTextField totalDebitField, totalCreditField, totalRemainingBalanceField;
+    private int selectedSupplierRow = -1;
+    private int selectedSupplierId = -1;
+    private static final String DB_URL = "jdbc:mysql://localhost:3306/zaibautos";
+    private static final String DB_USER = "root";
+    private static final String DB_PASSWORD = "root";
 
     public SupplierLedgerFrame() {
         setTitle("Zaib Autos - Supplier Ledger");
@@ -43,6 +44,10 @@ public class SupplierLedgerFrame extends JFrame {
         cardLayout.show(mainPanel, "List");
 
         setVisible(true);
+    }
+
+    private Connection getConnection() throws SQLException {
+        return DriverManager.getConnection(DB_URL, DB_USER, DB_PASSWORD);
     }
 
     private JLabel initTitleLabel(String text) {
@@ -86,18 +91,17 @@ public class SupplierLedgerFrame extends JFrame {
         panel.setBorder(new EmptyBorder(10, 10, 10, 10));
         panel.setBackground(Color.WHITE);
 
-        supplierModel = new DefaultTableModel(new String[]{"Supplier Name", "Phone No"}, 0);
+        supplierModel = new DefaultTableModel(new String[]{"Supplier ID", "Supplier Name", "Phone No"}, 0);
         supplierTable = new JTable(supplierModel);
         supplierTable.setFont(new Font("Arial", Font.PLAIN, 14));
         supplierTable.setRowHeight(25);
         supplierTable.setGridColor(new Color(200, 200, 200));
         supplierTable.setShowGrid(true);
+        supplierTable.getColumnModel().getColumn(0).setMinWidth(0);
+        supplierTable.getColumnModel().getColumn(0).setMaxWidth(0);
         JScrollPane scrollPane = new JScrollPane(supplierTable);
 
-        DataManager dataManager = DataManager.getInstance();
-        for (DataManager.Supplier supplier : dataManager.getSuppliers()) {
-            supplierModel.addRow(new Object[]{supplier.name, supplier.phone});
-        }
+        loadSuppliers();
 
         JTextField searchField = new JTextField();
         searchField.setFont(new Font("Arial", Font.PLAIN, 14));
@@ -133,12 +137,30 @@ public class SupplierLedgerFrame extends JFrame {
             public void mouseClicked(MouseEvent e) {
                 if (supplierTable.getSelectedRow() != -1) {
                     selectedSupplierRow = supplierTable.getSelectedRow();
+                    selectedSupplierId = (Integer) supplierModel.getValueAt(selectedSupplierRow, 0);
                     showSupplierDetailPanel();
                 }
             }
         });
 
         return panel;
+    }
+
+    private void loadSuppliers() {
+        supplierModel.setRowCount(0);
+        try (Connection conn = getConnection();
+             Statement stmt = conn.createStatement();
+             ResultSet rs = stmt.executeQuery("SELECT supplier_id, name, phone FROM suppliers")) {
+            while (rs.next()) {
+                supplierModel.addRow(new Object[]{
+                        rs.getInt("supplier_id"),
+                        rs.getString("name"),
+                        rs.getString("phone")
+                });
+            }
+        } catch (SQLException e) {
+            JOptionPane.showMessageDialog(this, "Error loading suppliers: " + e.getMessage(), "Database Error", JOptionPane.ERROR_MESSAGE);
+        }
     }
 
     private JPanel supplierDetailPanel() {
@@ -267,20 +289,18 @@ public class SupplierLedgerFrame extends JFrame {
 
     private void showDateRangeDialog(DefaultTableModel ledgerModel) {
         JDialog dateDialog = new JDialog(this, "Select Date Range", true);
-        dateDialog.setSize(450, 200); // Increased height for better spacing
+        dateDialog.setSize(450, 200);
         dateDialog.setLocationRelativeTo(this);
 
-        // Use GridBagLayout for flexible spacing
         dateDialog.setLayout(new GridBagLayout());
         GridBagConstraints gbc = new GridBagConstraints();
-        gbc.insets = new Insets(10, 10, 10, 10); // Padding around all components
+        gbc.insets = new Insets(10, 10, 10, 10);
         gbc.fill = GridBagConstraints.HORIZONTAL;
 
-        // Initialize date pickers
         UtilDateModel startModel = new UtilDateModel();
         UtilDateModel endModel = new UtilDateModel();
         Calendar calendar = Calendar.getInstance();
-        calendar.set(2025, Calendar.JUNE, 7, 20, 14); // June 07, 2025, 08:14 PM PKT (current time)
+        calendar.set(2025, Calendar.JULY, 20);
         endModel.setValue(calendar.getTime());
 
         Properties dateProps = new Properties();
@@ -294,7 +314,6 @@ public class SupplierLedgerFrame extends JFrame {
         JDatePickerImpl startDatePicker = new JDatePickerImpl(startDatePanel, new DateLabelFormatter());
         JDatePickerImpl endDatePicker = new JDatePickerImpl(endDatePanel, new DateLabelFormatter());
 
-        // Add labels and pickers with spacing
         gbc.gridx = 0;
         gbc.gridy = 0;
         gbc.anchor = GridBagConstraints.WEST;
@@ -315,8 +334,7 @@ public class SupplierLedgerFrame extends JFrame {
         gbc.anchor = GridBagConstraints.WEST;
         dateDialog.add(endDatePicker, gbc);
 
-        // Add buttons with spacing
-        JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.CENTER, 10, 10)); // Horizontal and vertical gaps
+        JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.CENTER, 10, 10));
         JButton okButton = new JButton("OK");
         JButton cancelButton = new JButton("Cancel");
         okButton.addActionListener(e -> {
@@ -335,16 +353,14 @@ public class SupplierLedgerFrame extends JFrame {
                 return;
             }
 
-            System.out.println("Start Date: " + new SimpleDateFormat("dd-MM-yyyy").format(startDate));
-            System.out.println("End Date: " + new SimpleDateFormat("dd-MM-yyyy").format(endDate));
             DefaultTableModel filteredModel = filterLedgerByDateRange(ledgerModel, startDate, endDate);
             String supplierName = supplierNameLabel.getText().replace("Supplier: ", "");
             String phone = supplierPhoneLabel.getText().replace("Phone: ", "");
-            InvoiceGenerator invoiceGenerator = new InvoiceGenerator(filteredModel, supplierName, phone, startDate, endDate); // Updated line
+            InvoiceGenerator invoiceGenerator = new InvoiceGenerator(filteredModel, supplierName, phone, startDate, endDate);
             invoiceGenerator.setVisible(true);
             invoiceGenerator.toFront();
             invoiceGenerator.requestFocus();
-            invoiceGenerator.setAlwaysOnTop(true); // Optional: Forces the window to stay on top
+            invoiceGenerator.setAlwaysOnTop(true);
             dateDialog.dispose();
         });
 
@@ -355,7 +371,7 @@ public class SupplierLedgerFrame extends JFrame {
 
         gbc.gridx = 0;
         gbc.gridy = 2;
-        gbc.gridwidth = 2; // Span across both columns
+        gbc.gridwidth = 2;
         gbc.anchor = GridBagConstraints.CENTER;
         dateDialog.add(buttonPanel, gbc);
 
@@ -411,28 +427,30 @@ public class SupplierLedgerFrame extends JFrame {
     }
 
     private void showSupplierDetailPanel() {
-        DataManager dataManager = DataManager.getInstance();
-        DataManager.Supplier supplier = dataManager.getSuppliers().get(selectedSupplierRow);
-        supplierNameLabel.setText("Supplier: " + supplier.name);
-        supplierPhoneLabel.setText("Phone: " + supplier.phone);
+        String name = (String) supplierModel.getValueAt(selectedSupplierRow, 1);
+        String phone = (String) supplierModel.getValueAt(selectedSupplierRow, 2);
+        supplierNameLabel.setText("Supplier: " + name);
+        supplierPhoneLabel.setText("Phone: " + phone);
 
         ledgerModel.setRowCount(0);
-
-        Object[][] dummyData = {
-                {"SUP-001", "01-06-2025", "Initial balance", 0.0, 1000.0, -1000.0},
-                {"SUP-002", "02-06-2025", "Purchase", 500.0, 0.0, -1500.0},
-                {"SUP-003", "03-06-2025", "Payment", 0.0, 300.0, -1200.0},
-                {"SUP-004", "04-06-2025", "Purchase", 700.0, 0.0, -1900.0},
-                {"SUP-005", "05-06-2025", "Payment", 0.0, 400.0, -1500.0},
-                {"SUP-006", "06-06-2025", "Purchase", 600.0, 0.0, -2100.0},
-                {"SUP-007", "07-06-2025", "Payment", 0.0, 500.0, -1600.0}
-        };
-
-        for (Object[] row : dummyData) {
-            double debit = (Double) row[3];
-            double credit = (Double) row[4];
-            double remainingBalance = (Double) row[5]; // Using pre-calculated remaining balance
-            ledgerModel.addRow(new Object[]{row[0], row[1], row[2], debit, credit, remainingBalance});
+        try (Connection conn = getConnection();
+             PreparedStatement pstmt = conn.prepareStatement(
+                     "SELECT bill_no, date, remarks, debit, credit, balance FROM supplier_ledgers WHERE supplier_id = ?")) {
+            pstmt.setInt(1, selectedSupplierId);
+            ResultSet rs = pstmt.executeQuery();
+            SimpleDateFormat dateFormat = new SimpleDateFormat("dd-MM-yyyy");
+            while (rs.next()) {
+                ledgerModel.addRow(new Object[]{
+                        rs.getInt("bill_no"),
+                        dateFormat.format(rs.getDate("date")),
+                        rs.getString("remarks"),
+                        rs.getDouble("debit"),
+                        rs.getDouble("credit"),
+                        rs.getDouble("balance")
+                });
+            }
+        } catch (SQLException e) {
+            JOptionPane.showMessageDialog(this, "Error loading ledger: " + e.getMessage(), "Database Error", JOptionPane.ERROR_MESSAGE);
         }
 
         updateTotals();
@@ -468,10 +486,25 @@ public class SupplierLedgerFrame extends JFrame {
                 JOptionPane.showMessageDialog(this, "Name and phone are required.", "Error", JOptionPane.ERROR_MESSAGE);
                 return;
             }
-            DataManager dataManager = DataManager.getInstance();
-            DataManager.Supplier newSupplier = new DataManager.Supplier(dataManager.getSuppliers().size() + 1, supplierName, supplierPhone);
-            dataManager.addSupplier(newSupplier);
-            supplierModel.addRow(new Object[]{supplierName, supplierPhone});
+            try (Connection conn = getConnection();
+                 PreparedStatement pstmt = conn.prepareStatement(
+                         "INSERT INTO suppliers (name, phone) VALUES (?, ?)",
+                         Statement.RETURN_GENERATED_KEYS)) {
+                pstmt.setString(1, supplierName);
+                pstmt.setString(2, supplierPhone);
+                pstmt.executeUpdate();
+
+                ResultSet rs = pstmt.getGeneratedKeys();
+                int supplierIdVal = -1;
+                if (rs.next()) {
+                    supplierIdVal = rs.getInt(1);
+                }
+                rs.close();
+
+                supplierModel.addRow(new Object[]{supplierIdVal, supplierName, supplierPhone});
+            } catch (SQLException e) {
+                JOptionPane.showMessageDialog(this, "Error adding supplier: " + e.getMessage(), "Database Error", JOptionPane.ERROR_MESSAGE);
+            }
         }
     }
 
@@ -480,9 +513,26 @@ public class SupplierLedgerFrame extends JFrame {
         if (selectedRow != -1) {
             int confirm = JOptionPane.showConfirmDialog(this, "Are you sure you want to delete this supplier?", "Confirm Delete", JOptionPane.YES_NO_OPTION);
             if (confirm == JOptionPane.YES_OPTION) {
-                DataManager dataManager = DataManager.getInstance();
-                dataManager.getSuppliers().remove(selectedRow);
-                supplierModel.removeRow(selectedRow);
+                int supplierId = (Integer) supplierModel.getValueAt(selectedRow, 0);
+                try (Connection conn = getConnection()) {
+                    conn.setAutoCommit(false);
+                    try (PreparedStatement pstmt1 = conn.prepareStatement("DELETE FROM supplier_ledgers WHERE supplier_id = ?");
+                         PreparedStatement pstmt2 = conn.prepareStatement("DELETE FROM suppliers WHERE supplier_id = ?")) {
+                        pstmt1.setInt(1, supplierId);
+                        pstmt1.executeUpdate();
+                        pstmt2.setInt(1, supplierId);
+                        pstmt2.executeUpdate();
+                        conn.commit();
+                        supplierModel.removeRow(selectedRow);
+                    } catch (SQLException e) {
+                        conn.rollback();
+                        JOptionPane.showMessageDialog(this, "Error deleting supplier: " + e.getMessage(), "Database Error", JOptionPane.ERROR_MESSAGE);
+                    } finally {
+                        conn.setAutoCommit(true);
+                    }
+                } catch (SQLException e) {
+                    JOptionPane.showMessageDialog(this, "Error connecting to database: " + e.getMessage(), "Database Error", JOptionPane.ERROR_MESSAGE);
+                }
             }
         } else {
             JOptionPane.showMessageDialog(this, "Please select a supplier to delete.", "Error", JOptionPane.ERROR_MESSAGE);
@@ -490,8 +540,7 @@ public class SupplierLedgerFrame extends JFrame {
     }
 
     private void addSupplierEntry() {
-        String billNoStr = String.format("SUP-%03d", nextBillNo++);
-        JTextField billNo = new JTextField(billNoStr);
+        JTextField billNo = new JTextField();
         billNo.setEditable(false);
         JTextField date = new JTextField(new SimpleDateFormat("dd-MM-yyyy").format(new Date()));
         JTextField remarks = new JTextField();
@@ -520,20 +569,42 @@ public class SupplierLedgerFrame extends JFrame {
                     JOptionPane.showMessageDialog(this, "Debit and Credit must be non-negative.", "Error", JOptionPane.ERROR_MESSAGE);
                     return;
                 }
+                SimpleDateFormat dateFormat = new SimpleDateFormat("dd-MM-yyyy");
+                Date entryDate = dateFormat.parse(date.getText().trim());
+                try (Connection conn = getConnection();
+                     PreparedStatement pstmt = conn.prepareStatement(
+                             "INSERT INTO supplier_ledgers (supplier_id, date, remarks, debit, credit) VALUES (?, ?, ?, ?, ?)",
+                             Statement.RETURN_GENERATED_KEYS)) {
+                    pstmt.setInt(1, selectedSupplierId);
+                    pstmt.setDate(2, new java.sql.Date(entryDate.getTime()));
+                    pstmt.setString(3, remarks.getText().trim());
+                    pstmt.setDouble(4, debitVal);
+                    pstmt.setDouble(5, creditVal);
+                    pstmt.executeUpdate();
 
-                double remainingBalance = debitVal - creditVal;
-                ledgerModel.addRow(new Object[]{
-                        billNo.getText(),
-                        date.getText(),
-                        remarks.getText(),
-                        debitVal,
-                        creditVal,
-                        remainingBalance
-                });
+                    ResultSet rs = pstmt.getGeneratedKeys();
+                    int newBillNo = -1;
+                    if (rs.next()) {
+                        newBillNo = rs.getInt(1);
+                    }
+                    rs.close();
 
-                updateTotals();
+                    ledgerModel.addRow(new Object[]{
+                            newBillNo,
+                            date.getText(),
+                            remarks.getText(),
+                            debitVal,
+                            creditVal,
+                            debitVal - creditVal
+                    });
+                    updateTotals();
+                } catch (SQLException e) {
+                    JOptionPane.showMessageDialog(this, "Error adding ledger entry: " + e.getMessage(), "Database Error", JOptionPane.ERROR_MESSAGE);
+                }
             } catch (NumberFormatException ex) {
                 JOptionPane.showMessageDialog(this, "Invalid number format for Debit or Credit.", "Error", JOptionPane.ERROR_MESSAGE);
+            } catch (java.text.ParseException ex) {
+                JOptionPane.showMessageDialog(this, "Invalid date format.", "Error", JOptionPane.ERROR_MESSAGE);
             }
         }
     }
@@ -543,6 +614,7 @@ public class SupplierLedgerFrame extends JFrame {
         if (selected != -1) {
             double currentDebit = (Double) ledgerModel.getValueAt(selected, 3);
             double currentCredit = (Double) ledgerModel.getValueAt(selected, 4);
+            int billNo = (Integer) ledgerModel.getValueAt(selected, 0);
 
             JTextField debit = new JTextField(String.valueOf(currentDebit));
             JTextField credit = new JTextField(String.valueOf(currentCredit));
@@ -563,13 +635,21 @@ public class SupplierLedgerFrame extends JFrame {
                         JOptionPane.showMessageDialog(this, "Debit and Credit must be non-negative.", "Error", JOptionPane.ERROR_MESSAGE);
                         return;
                     }
+                    try (Connection conn = getConnection();
+                         PreparedStatement pstmt = conn.prepareStatement(
+                                 "UPDATE supplier_ledgers SET debit = ?, credit = ? WHERE bill_no = ?")) {
+                        pstmt.setDouble(1, debitVal);
+                        pstmt.setDouble(2, creditVal);
+                        pstmt.setInt(3, billNo);
+                        pstmt.executeUpdate();
 
-                    double remainingBalance = debitVal - creditVal;
-                    ledgerModel.setValueAt(debitVal, selected, 3);
-                    ledgerModel.setValueAt(creditVal, selected, 4);
-                    ledgerModel.setValueAt(remainingBalance, selected, 5);
-
-                    updateTotals();
+                        ledgerModel.setValueAt(debitVal, selected, 3);
+                        ledgerModel.setValueAt(creditVal, selected, 4);
+                        ledgerModel.setValueAt(debitVal - creditVal, selected, 5);
+                        updateTotals();
+                    } catch (SQLException e) {
+                        JOptionPane.showMessageDialog(this, "Error updating ledger entry: " + e.getMessage(), "Database Error", JOptionPane.ERROR_MESSAGE);
+                    }
                 } catch (NumberFormatException ex) {
                     JOptionPane.showMessageDialog(this, "Invalid number format for Debit or Credit.", "Error", JOptionPane.ERROR_MESSAGE);
                 }
@@ -584,9 +664,16 @@ public class SupplierLedgerFrame extends JFrame {
         if (selected != -1) {
             int confirm = JOptionPane.showConfirmDialog(this, "Delete selected entry?", "Confirm", JOptionPane.YES_NO_OPTION);
             if (confirm == JOptionPane.YES_OPTION) {
-                String billNo = ledgerModel.getValueAt(selected, 0).toString();
-                ledgerModel.removeRow(selected);
-                updateTotals();
+                int billNo = (Integer) ledgerModel.getValueAt(selected, 0);
+                try (Connection conn = getConnection();
+                     PreparedStatement pstmt = conn.prepareStatement("DELETE FROM supplier_ledgers WHERE bill_no = ?")) {
+                    pstmt.setInt(1, billNo);
+                    pstmt.executeUpdate();
+                    ledgerModel.removeRow(selected);
+                    updateTotals();
+                } catch (SQLException e) {
+                    JOptionPane.showMessageDialog(this, "Error deleting ledger entry: " + e.getMessage(), "Database Error", JOptionPane.ERROR_MESSAGE);
+                }
             }
         } else {
             JOptionPane.showMessageDialog(this, "Please select an entry to delete.", "Error", JOptionPane.ERROR_MESSAGE);
@@ -598,7 +685,6 @@ public class SupplierLedgerFrame extends JFrame {
     }
 }
 
-// Formatter for JDatePicker
 class DateLabelFormatter extends JFormattedTextField.AbstractFormatter {
     private final SimpleDateFormat dateFormat = new SimpleDateFormat("dd-MM-yyyy");
 

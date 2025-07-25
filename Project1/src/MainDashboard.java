@@ -55,17 +55,21 @@ public class MainDashboard extends JFrame {
         drawerPanel.add(emailLabel);
 
         // Drawer buttons in the recommended order
-        addDrawerButton(drawerPanel, "Dashboard", e -> {
-            // Already on Dashboard, no action needed
-        });
-        addDrawerButton(drawerPanel, "Inventory Management", e -> {
-            new InventoryFrame();
-            // Removed closeDrawer() to keep drawer open
-        });
         addDrawerButton(drawerPanel, "Sales Entry", e -> {
             new SalesEntryFrame();
             // Removed closeDrawer() to keep drawer open
         });
+
+        addDrawerButton(drawerPanel, "Profit Entry", e -> {
+            new ProfitEntryFrame();
+            // Removed closeDrawer() to keep drawer open
+        });
+
+        addDrawerButton(drawerPanel, "Inventory Management", e -> {
+            new InventoryFrame();
+            // Removed closeDrawer() to keep drawer open
+        });
+
         addDrawerButton(drawerPanel, "Customer Ledger", e -> {
             new CustomerLedgerFrame();
             // Removed closeDrawer() to keep drawer open
@@ -79,10 +83,7 @@ public class MainDashboard extends JFrame {
             new ExpenditureTrackingFrame();
             // Removed closeDrawer() to keep drawer open
         });
-        addDrawerButton(drawerPanel, "Profit Entry", e -> {
-            new ProfitEntryFrame();
-            // Removed closeDrawer() to keep drawer open
-        });
+
         addDrawerButton(drawerPanel, "Sales Analysis", e -> {
             new SalesAnalysisFrame();
             // Removed closeDrawer() to keep drawer open
@@ -90,6 +91,7 @@ public class MainDashboard extends JFrame {
         addDrawerButton(drawerPanel, "Logout", e -> {
             new AdminLogin();
             dispose();
+
         }, true); // Critical action
         addDrawerButton(drawerPanel, "Exit", e -> System.exit(0), true); // Critical action
 

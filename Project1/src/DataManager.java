@@ -87,16 +87,14 @@ public class DataManager {
         int id;
         String date;
         String category;
-        Supplier supplier; // Nullable
         String description;
         double amount;
         String paymentType;
 
-        Expenditure(int id, String date, String category, Supplier supplier, String description, double amount, String paymentType) {
+        Expenditure(int id, String date, String category, String description, double amount, String paymentType) {
             this.id = id;
             this.date = date;
             this.category = category;
-            this.supplier = supplier;
             this.description = description;
             this.amount = amount;
             this.paymentType = paymentType;
@@ -165,15 +163,25 @@ public class DataManager {
         suppliers.add(new Supplier(2, "Motor Supplies", "4445556667"));
         products.add(new Product(1, "Oil Filter", "Bosch", 1500.0, "Filter", "Unit", 50));
         products.add(new Product(2, "Brake Pads", "Toyota", 3000.0, "Brake", "Set", 20));
-        expenditures.add(new Expenditure(1, "21-05-2025", "Operational", null, "Office Rent", 10000.0, "Cash"));
+        expenditures.add(new Expenditure(1, "21-05-2025", "Operational", "Office Rent", 10000.0, "Cash"));
         sales.add(new Sales(1, "21-05-2025", 3000.0, 1000.0));
         sales.add(new Sales(2, "15-05-2025", 2000.0, 700.0));
         profits.add(new Profit(1, "21-05-2025", 5000.0, "End of day profit"));
 
-        // Commented database initialization
-        /*
+        // Database initialization
         try {
-            Connection conn = DriverManager.getConnection("jdbc:mysql://localhost:3306/zaibautos", "root", "");
+            Connection conn = DriverManager.getConnection("jdbc:mysql://localhost:3306/zaib_autos_pos_new?useSSL=false", "zaib_user", "ZaibPass2025");
+
+            // Clear existing data (optional, for fresh start)
+            Statement stmt = conn.createStatement();
+            stmt.executeUpdate("DELETE FROM customers");
+            stmt.executeUpdate("DELETE FROM customer_ledgers");
+            stmt.executeUpdate("DELETE FROM suppliers");
+            stmt.executeUpdate("DELETE FROM products");
+            stmt.executeUpdate("DELETE FROM expenditures");
+            stmt.executeUpdate("DELETE FROM sales");
+            stmt.executeUpdate("DELETE FROM profits");
+            stmt.close();
 
             // Insert customers
             String customerSql = "INSERT INTO customers (customer_id, name, phone, balance, amount_paid, credit_limit) VALUES (?, ?, ?, ?, ?, ?)";
@@ -237,20 +245,15 @@ public class DataManager {
             productStmt.close();
 
             // Insert expenditures
-            String expenditureSql = "INSERT INTO expenditures (expenditure_id, expenditure_date, category, supplier_id, description, amount, payment_type) VALUES (?, ?, ?, ?, ?, ?, ?)";
+            String expenditureSql = "INSERT INTO expenditures (expenditure_id, expenditure_date, category, description, amount, payment_type) VALUES (?, ?, ?, ?, ?, ?)";
             PreparedStatement expenditureStmt = conn.prepareStatement(expenditureSql);
             for (Expenditure e : expenditures) {
                 expenditureStmt.setInt(1, e.id);
                 expenditureStmt.setString(2, e.date);
                 expenditureStmt.setString(3, e.category);
-                if (e.supplier != null) {
-                    expenditureStmt.setInt(4, e.supplier.id);
-                } else {
-                    expenditureStmt.setNull(4, Types.INTEGER);
-                }
-                expenditureStmt.setString(5, e.description);
-                expenditureStmt.setDouble(6, e.amount);
-                expenditureStmt.setString(7, e.paymentType);
+                expenditureStmt.setString(4, e.description);
+                expenditureStmt.setDouble(5, e.amount);
+                expenditureStmt.setString(6, e.paymentType);
                 expenditureStmt.executeUpdate();
             }
             expenditureStmt.close();
@@ -283,7 +286,6 @@ public class DataManager {
         } catch (SQLException ex) {
             System.err.println("Database initialization error: " + ex.getMessage());
         }
-        */
     }
 
     public static DataManager getInstance() {

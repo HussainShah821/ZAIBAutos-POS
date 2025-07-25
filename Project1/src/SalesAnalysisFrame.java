@@ -1,4 +1,5 @@
 import javax.swing.*;
+import javax.swing.Timer;
 import javax.swing.border.Border;
 import javax.swing.table.DefaultTableCellRenderer;
 import javax.swing.table.DefaultTableModel;
@@ -11,7 +12,6 @@ import java.io.*;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Date;
-import java.util.List;
 
 public class SalesAnalysisFrame extends JFrame {
     private JTable salesTable;
@@ -20,8 +20,10 @@ public class SalesAnalysisFrame extends JFrame {
     private JLabel dailyLabel, monthlyLabel, yearlyLabel;
     private NumberFormat currencyFormat = NumberFormat.getCurrencyInstance(new Locale("en", "PK"));
     private Border defaultBorder, errorBorder;
-    private static int nextSaleId = 1;
-    private static List<DataManager.Sales> dummySales = new ArrayList<>(); // Dummy data storage
+    private static final String DB_URL = "jdbc:mysql://localhost:3306/zaibautos";
+    private static final String DB_USER = "root";
+    private static final String DB_PASSWORD = "root";
+    private Timer refreshTimer;
 
     public SalesAnalysisFrame() {
         setTitle("Zaib Autos - Sales Analysis");
@@ -31,11 +33,9 @@ public class SalesAnalysisFrame extends JFrame {
         setLayout(new BorderLayout(10, 10));
         setResizable(true);
 
-        // Define borders for validation feedback
         defaultBorder = BorderFactory.createLineBorder(Color.GRAY, 1);
         errorBorder = BorderFactory.createLineBorder(Color.RED, 1);
 
-        // Top Panel: Date Selection and Actions
         JPanel topPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 10));
         topPanel.setBackground(Color.WHITE);
         dateField = new JTextField("dd-MM-yyyy", 12);
@@ -43,7 +43,6 @@ public class SalesAnalysisFrame extends JFrame {
         dateField.setForeground(Color.GRAY);
         dateField.setBorder(defaultBorder);
         dateField.setToolTipText("Enter date in dd-MM-yyyy format (e.g., 21-05-2025) or double-click for today");
-        // HCI: Placeholder behavior
         dateField.addFocusListener(new FocusAdapter() {
             @Override
             public void focusGained(FocusEvent e) {
@@ -61,7 +60,6 @@ public class SalesAnalysisFrame extends JFrame {
                 }
             }
         });
-        // HCI: Double-click to fill current date
         dateField.addMouseListener(new MouseAdapter() {
             @Override
             public void mouseClicked(MouseEvent e) {
@@ -74,25 +72,21 @@ public class SalesAnalysisFrame extends JFrame {
         });
 
         JButton pickDateBtn = createStyledButton("Pick Date");
-        JButton addEntryBtn = createStyledButton("Add Entry");
         JButton clearBtn = createStyledButton("Clear Data");
         JButton exportBtn = createStyledButton("Export Report");
 
         pickDateBtn.addActionListener(e -> showDatePicker());
-        addEntryBtn.addActionListener(e -> showAddEntryDialog());
         clearBtn.addActionListener(e -> clearData());
         exportBtn.addActionListener(e -> exportReport());
 
         topPanel.add(new JLabel("Analysis Date:"));
         topPanel.add(dateField);
         topPanel.add(pickDateBtn);
-        topPanel.add(addEntryBtn);
         topPanel.add(clearBtn);
         topPanel.add(exportBtn);
         add(topPanel, BorderLayout.NORTH);
 
-        // Center: Sales Table
-        salesModel = new DefaultTableModel(new String[]{"Date", "Sales", "Expenses", "Profit", "Profit %"}, 0) {
+        salesModel = new DefaultTableModel(new String[]{"Date", "Sales", "Expenses", "Profit"}, 0) {
             @Override
             public boolean isCellEditable(int row, int column) { return false; }
             @Override
@@ -107,7 +101,6 @@ public class SalesAnalysisFrame extends JFrame {
         salesTable.getTableHeader().setFont(new Font("Arial", Font.BOLD, 14));
         salesTable.setAutoCreateRowSorter(true);
 
-        // Right-align numeric columns
         DefaultTableCellRenderer rightRenderer = new DefaultTableCellRenderer();
         rightRenderer.setHorizontalAlignment(JLabel.RIGHT);
         for (int i = 1; i < salesTable.getColumnCount(); i++) {
@@ -118,7 +111,6 @@ public class SalesAnalysisFrame extends JFrame {
         scrollPane.setBorder(BorderFactory.createTitledBorder("Sales Records"));
         add(scrollPane, BorderLayout.CENTER);
 
-        // Bottom: Summary Panel
         JPanel summaryPanel = new JPanel(new GridLayout(3, 1, 5, 5));
         summaryPanel.setBorder(BorderFactory.createEmptyBorder(10, 20, 10, 20));
         summaryPanel.setBackground(Color.WHITE);
@@ -132,10 +124,41 @@ public class SalesAnalysisFrame extends JFrame {
         summaryPanel.add(yearlyLabel);
         add(summaryPanel, BorderLayout.SOUTH);
 
-        // Load sample data
-        loadSampleData();
+        loadSalesData();
         updateSummary();
+
+        // Start timer for real-time updates (every 5 seconds)
+        refreshTimer = new Timer(5000, e -> {
+            loadSalesData();
+            updateSummary();
+        });
+        refreshTimer.start();
+
         setVisible(true);
+    }
+
+    private Connection getConnection() throws SQLException {
+        return DriverManager.getConnection(DB_URL, DB_USER, DB_PASSWORD);
+    }
+
+    private void loadSalesData() {
+        salesModel.setRowCount(0);
+        try (Connection conn = getConnection();
+             Statement stmt = conn.createStatement();
+             ResultSet rs = stmt.executeQuery(
+                     "SELECT date, sales, expenses, profit FROM sales_analysis")) {
+            SimpleDateFormat sdf = new SimpleDateFormat("dd-MM-yyyy");
+            while (rs.next()) {
+                salesModel.addRow(new Object[]{
+                        sdf.format(rs.getDate("date")),
+                        rs.getDouble("sales"),
+                        rs.getDouble("expenses"),
+                        rs.getDouble("profit")
+                });
+            }
+        } catch (SQLException e) {
+            JOptionPane.showMessageDialog(this, "Error loading sales data: " + e.getMessage(), "Database Error", JOptionPane.ERROR_MESSAGE);
+        }
     }
 
     private JButton createStyledButton(String text) {
@@ -179,7 +202,6 @@ public class SalesAnalysisFrame extends JFrame {
         sdf.setLenient(false);
         try {
             Date date = sdf.parse(dateStr);
-            // Prevent future dates
             if (date.after(new Date())) {
                 if (field != null) field.setBorder(errorBorder);
                 return false;
@@ -198,7 +220,6 @@ public class SalesAnalysisFrame extends JFrame {
         inputField.setForeground(Color.BLACK);
         inputField.setBorder(defaultBorder);
         inputField.setToolTipText("Enter date in dd-MM-yyyy format (e.g., 21-05-2025)");
-        // HCI: Double-click to fill current date
         inputField.addMouseListener(new MouseAdapter() {
             @Override
             public void mouseClicked(MouseEvent e) {
@@ -230,79 +251,6 @@ public class SalesAnalysisFrame extends JFrame {
         }
     }
 
-    private void showAddEntryDialog() {
-        JPanel panel = new JPanel(new GridLayout(3, 2, 10, 10));
-        panel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
-
-        JTextField salesField = new JTextField();
-        salesField.setFont(new Font("Arial", Font.PLAIN, 14));
-        salesField.setToolTipText("Enter sales amount");
-        JTextField expenseField = new JTextField();
-        expenseField.setFont(new Font("Arial", Font.PLAIN, 14));
-        expenseField.setToolTipText("Enter expenses amount");
-        JTextField profitField = new JTextField();
-        profitField.setFont(new Font("Arial", Font.PLAIN, 14));
-        profitField.setEditable(false);
-        profitField.setToolTipText("Calculated profit and profit percentage");
-
-        // Auto-calculate profit
-        KeyAdapter calculator = new KeyAdapter() {
-            @Override
-            public void keyReleased(KeyEvent e) {
-                try {
-                    double sales = salesField.getText().isEmpty() ? 0 : Double.parseDouble(salesField.getText());
-                    double expenses = expenseField.getText().isEmpty() ? 0 : Double.parseDouble(expenseField.getText());
-                    double profit = sales - expenses;
-                    double profitPercent = sales > 0 ? (profit / sales) * 100 : 0;
-                    profitField.setText(String.format("%.2f (%.1f%%)", profit, profitPercent));
-                } catch (NumberFormatException ex) {
-                    profitField.setText("Invalid input");
-                }
-            }
-        };
-
-        salesField.addKeyListener(calculator);
-        expenseField.addKeyListener(calculator);
-
-        panel.add(new JLabel("Sales Amount:"));
-        panel.add(salesField);
-        panel.add(new JLabel("Expenses:"));
-        panel.add(expenseField);
-        panel.add(new JLabel("Profit:"));
-        panel.add(profitField);
-
-        int result = JOptionPane.showConfirmDialog(this, panel, "Add Daily Entry",
-                JOptionPane.OK_CANCEL_OPTION, JOptionPane.PLAIN_MESSAGE);
-
-        if (result == JOptionPane.OK_OPTION) {
-            try {
-                double sales = Double.parseDouble(salesField.getText());
-                double expenses = Double.parseDouble(expenseField.getText());
-                if (sales < 0 || expenses < 0) {
-                    JOptionPane.showMessageDialog(this, "Sales and expenses cannot be negative.", "Error", JOptionPane.ERROR_MESSAGE);
-                    return;
-                }
-                String date = dateField.getText();
-                if (!validateDate(date, dateField)) {
-                    JOptionPane.showMessageDialog(this, "Invalid or future date in analysis field. Use dd-MM-yyyy.", "Error", JOptionPane.ERROR_MESSAGE);
-                    return;
-                }
-
-                double profit = sales - expenses;
-                double profitPercent = sales > 0 ? (profit / sales) * 100 : 0;
-
-                // Use dummy sales list instead of DataManager
-                dummySales.add(new DataManager.Sales(nextSaleId++, date, sales, expenses));
-                salesModel.addRow(new Object[]{date, sales, expenses, profit, profitPercent});
-
-                updateSummary();
-                JOptionPane.showMessageDialog(this, "Entry added successfully!", "Success", JOptionPane.INFORMATION_MESSAGE);
-            } catch (NumberFormatException e) {
-                JOptionPane.showMessageDialog(this, "Please enter valid numbers for sales and expenses.", "Input Error", JOptionPane.ERROR_MESSAGE);
-            }
-        }
-    }
-
     private void updateSummary() {
         String selectedDate = dateField.getText();
         if (!validateDate(selectedDate, dateField)) {
@@ -313,80 +261,86 @@ public class SalesAnalysisFrame extends JFrame {
         }
 
         SimpleDateFormat sdf = new SimpleDateFormat("dd-MM-yyyy");
-        double dailySales = 0, dailyExpenses = 0;
-        double monthlySales = 0, monthlyExpenses = 0;
-        double yearlySales = 0, yearlyExpenses = 0;
+        double dailySales = 0, dailyExpenses = 0, dailyProfit = 0;
+        double monthlySales = 0, monthlyExpenses = 0, monthlyProfit = 0;
+        double yearlySales = 0, yearlyExpenses = 0, yearlyProfit = 0;
 
         try {
             Date refDate = sdf.parse(selectedDate);
             Calendar refCal = Calendar.getInstance();
             refCal.setTime(refDate);
+            int refMonth = refCal.get(Calendar.MONTH) + 1;
+            int refYear = refCal.get(Calendar.YEAR);
 
-            // Use dummy sales instead of DataManager
-            for (DataManager.Sales sale : dummySales) {
-                Date entryDate = sdf.parse(sale.date);
-                Calendar entryCal = Calendar.getInstance();
-                entryCal.setTime(entryDate);
+            try (Connection conn = getConnection();
+                 PreparedStatement pstmt = conn.prepareStatement(
+                         "SELECT date, sales, expenses, profit FROM sales_analysis")) {
+                ResultSet rs = pstmt.executeQuery();
+                while (rs.next()) {
+                    Date entryDate = rs.getDate("date");
+                    Calendar entryCal = Calendar.getInstance();
+                    entryCal.setTime(entryDate);
+                    int entryMonth = entryCal.get(Calendar.MONTH) + 1;
+                    int entryYear = entryCal.get(Calendar.YEAR);
 
-                // Daily
-                if (sdf.format(refDate).equals(sdf.format(entryDate))) {
-                    dailySales += sale.sales;
-                    dailyExpenses += sale.expenses;
-                }
+                    double sales = rs.getDouble("sales");
+                    double expenses = rs.getDouble("expenses");
+                    double profit = rs.getDouble("profit");
 
-                // Monthly
-                if (refCal.get(Calendar.MONTH) == entryCal.get(Calendar.MONTH)
-                        && refCal.get(Calendar.YEAR) == entryCal.get(Calendar.YEAR)) {
-                    monthlySales += sale.sales;
-                    monthlyExpenses += sale.expenses;
-                }
+                    if (sdf.format(refDate).equals(sdf.format(entryDate))) {
+                        dailySales += sales;
+                        dailyExpenses += expenses;
+                        dailyProfit += profit;
+                    }
 
-                // Yearly
-                if (refCal.get(Calendar.YEAR) == entryCal.get(Calendar.YEAR)) {
-                    yearlySales += sale.sales;
-                    yearlyExpenses += sale.expenses;
+                    if (refMonth == entryMonth && refYear == entryYear) {
+                        monthlySales += sales;
+                        monthlyExpenses += expenses;
+                        monthlyProfit += profit;
+                    }
+
+                    if (refYear == entryYear) {
+                        yearlySales += sales;
+                        yearlyExpenses += expenses;
+                        yearlyProfit += profit;
+                    }
                 }
             }
 
-            // Calculate profits and percentages
-            double dailyProfit = dailySales - dailyExpenses;
-            double dailyProfitPercent = dailySales > 0 ? (dailyProfit / dailySales) * 100 : 0;
-
-            double monthlyProfit = monthlySales - monthlyExpenses;
-            double monthlyProfitPercent = monthlySales > 0 ? (monthlyProfit / monthlySales) * 100 : 0;
-
-            double yearlyProfit = yearlySales - yearlyExpenses;
-            double yearlyProfitPercent = yearlySales > 0 ? (yearlyProfit / yearlySales) * 100 : 0;
-
-            // Update labels
-            dailyLabel.setText(String.format("<html><b>Today:</b> Sales: %s | Expenses: %s<br>Profit: %s (%.1f%%)</html>",
+            dailyLabel.setText(String.format("<html><b>Today:</b> Sales: %s | Expenses: %s | Profit: %s</html>",
                     currencyFormat.format(dailySales), currencyFormat.format(dailyExpenses),
-                    currencyFormat.format(dailyProfit), dailyProfitPercent));
+                    currencyFormat.format(dailyProfit)));
 
-            monthlyLabel.setText(String.format("<html><b>This Month:</b> Sales: %s | Expenses: %s<br>Profit: %s (%.1f%%)</html>",
+            monthlyLabel.setText(String.format("<html><b>This Month:</b> Sales: %s | Expenses: %s | Profit: %s</html>",
                     currencyFormat.format(monthlySales), currencyFormat.format(monthlyExpenses),
-                    currencyFormat.format(monthlyProfit), monthlyProfitPercent));
+                    currencyFormat.format(monthlyProfit)));
 
-            yearlyLabel.setText(String.format("<html><b>This Year:</b> Sales: %s | Expenses: %s<br>Profit: %s (%.1f%%)</html>",
+            yearlyLabel.setText(String.format("<html><b>This Year:</b> Sales: %s | Expenses: %s | Profit: %s</html>",
                     currencyFormat.format(yearlySales), currencyFormat.format(yearlyExpenses),
-                    currencyFormat.format(yearlyProfit), yearlyProfitPercent));
+                    currencyFormat.format(yearlyProfit)));
 
         } catch (ParseException e) {
             dailyLabel.setText("Today: Error parsing date");
             monthlyLabel.setText("This Month: Error parsing date");
             yearlyLabel.setText("This Year: Error parsing date");
+        } catch (SQLException e) {
+            JOptionPane.showMessageDialog(this, "Error updating summary: " + e.getMessage(), "Database Error", JOptionPane.ERROR_MESSAGE);
         }
     }
 
     private void clearData() {
-        int confirm = JOptionPane.showConfirmDialog(this, "Clear all sales data?", "Confirmation",
+        int confirm = JOptionPane.showConfirmDialog(this, "Clear all sales analysis data?", "Confirmation",
                 JOptionPane.YES_NO_OPTION);
         if (confirm == JOptionPane.YES_OPTION) {
-            dummySales.clear(); // Use dummy sales list instead of DataManager
-            salesModel.setRowCount(0);
-
-            updateSummary();
-            JOptionPane.showMessageDialog(this, "Sales data cleared successfully!", "Success", JOptionPane.INFORMATION_MESSAGE);
+            try (Connection conn = getConnection();
+                 PreparedStatement pstmt = conn.prepareStatement("DELETE FROM sales_analysis")) {
+                pstmt.executeUpdate();
+                salesModel.setRowCount(0);
+                updateSummary();
+                JOptionPane.showMessageDialog(this, "Sales analysis data cleared successfully!", "Success", JOptionPane.INFORMATION_MESSAGE);
+            } catch (SQLException e) {
+                JOptionPane.showMessageDialog(this, "Error clearing data: " + e.getMessage(), "Database Error", JOptionPane.ERROR_MESSAGE);
+            }
         }
     }
 
@@ -433,7 +387,7 @@ public class SalesAnalysisFrame extends JFrame {
             int yPos = 670;
             writer.write("BT /F1 10 Tf 50 " + yPos + " Td (Sales Records:) Tj ET\n");
             yPos -= 20;
-            writer.write("BT /F1 10 Tf 50 " + yPos + " Td (  Date  Sales  Expenses  Profit  Profit %) Tj ET\n");
+            writer.write("BT /F1 10 Tf 50 " + yPos + " Td (  Date  Sales  Expenses  Profit) Tj ET\n");
             yPos -= 20;
 
             for (int i = 0; i < salesModel.getRowCount(); i++) {
@@ -441,8 +395,7 @@ public class SalesAnalysisFrame extends JFrame {
                 String sales = currencyFormat.format(salesModel.getValueAt(i, 1)).replace("PKR", "").replace(",", "");
                 String expenses = currencyFormat.format(salesModel.getValueAt(i, 2)).replace("PKR", "").replace(",", "");
                 String profit = currencyFormat.format(salesModel.getValueAt(i, 3)).replace("PKR", "").replace(",", "");
-                String profitPercent = String.format("%.1f%%", salesModel.getValueAt(i, 4));
-                String line = String.format("%s  %s  %s  %s  %s", date, sales, expenses, profit, profitPercent);
+                String line = String.format("%s  %s  %s  %s", date, sales, expenses, profit);
                 writer.write("BT /F1 10 Tf 50 " + yPos + " Td (" + line + ") Tj ET\n");
                 yPos -= 20;
             }
@@ -487,24 +440,6 @@ public class SalesAnalysisFrame extends JFrame {
             JOptionPane.showMessageDialog(this, "Error exporting report: " + ex.getMessage(),
                     "Error", JOptionPane.ERROR_MESSAGE);
             ex.printStackTrace();
-        }
-    }
-
-    private void loadSampleData() {
-        Calendar cal = Calendar.getInstance();
-        SimpleDateFormat sdf = new SimpleDateFormat("dd-MM-yyyy");
-
-        // May 2025 sample data
-        cal.set(2025, Calendar.MAY, 1);
-        for (int i = 1; i <= 15; i++) {
-            cal.set(Calendar.DAY_OF_MONTH, i);
-            double sales = 1000 + (Math.random() * 2000);
-            double expenses = 300 + (Math.random() * 700);
-            double profit = sales - expenses;
-            double profitPercent = sales > 0 ? (profit / sales) * 100 : 0;
-
-            dummySales.add(new DataManager.Sales(nextSaleId++, sdf.format(cal.getTime()), sales, expenses));
-            salesModel.addRow(new Object[]{sdf.format(cal.getTime()), sales, expenses, profit, profitPercent});
         }
     }
 

@@ -4,19 +4,22 @@ import javax.swing.border.EmptyBorder;
 import javax.swing.table.DefaultTableModel;
 import java.awt.*;
 import java.awt.event.*;
+import java.math.BigDecimal;
+import java.sql.*;
 import java.text.SimpleDateFormat;
 import java.text.ParseException;
 import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.Date;
-import java.sql.*;
 
 public class ProfitEntryFrame extends JFrame {
     private DefaultTableModel profitTableModel;
     private JTable profitTable;
     private JTextField dateField, amountField, remarksField;
-    private static int nextProfitId = 2; // Starts after sample data
     private Border defaultBorder, errorBorder;
+    private static final String DB_URL = "jdbc:mysql://localhost:3306/zaibautos";
+    private static final String DB_USER = "root";
+    private static final String DB_PASSWORD = "root"; // Replace with your MySQL password
 
     public ProfitEntryFrame() {
         setTitle("Zaib Autos - Profit Entry");
@@ -42,12 +45,21 @@ public class ProfitEntryFrame extends JFrame {
 
         profitTableModel = new DefaultTableModel(new String[]{
                 "Profit ID", "Date", "Amount", "Remarks"
-        }, 0);
+        }, 0) {
+            @Override
+            public boolean isCellEditable(int row, int column) {
+                return false; // Prevent editing of table cells
+            }
+        };
         profitTable = new JTable(profitTableModel);
         profitTable.setFont(new Font("Arial", Font.PLAIN, 14));
         profitTable.setRowHeight(25);
         profitTable.setGridColor(new Color(200, 200, 200));
         profitTable.setShowGrid(true);
+        // Hide the Profit ID column
+        profitTable.getColumnModel().getColumn(0).setMinWidth(0);
+        profitTable.getColumnModel().getColumn(0).setMaxWidth(0);
+        profitTable.getColumnModel().getColumn(0).setWidth(0);
         JScrollPane scrollPane = new JScrollPane(profitTable);
         mainPanel.add(scrollPane, BorderLayout.CENTER);
 
@@ -57,15 +69,7 @@ public class ProfitEntryFrame extends JFrame {
         add(mainPanel, BorderLayout.CENTER);
 
         // Populate table with existing profits
-        DataManager dataManager = DataManager.getInstance();
-        for (DataManager.Profit profit : dataManager.getProfits()) {
-            profitTableModel.addRow(new Object[]{
-                    "PRF-" + profit.id,
-                    profit.date,
-                    profit.amount,
-                    profit.remarks
-            });
-        }
+        loadProfitData();
 
         setVisible(true);
     }
@@ -77,7 +81,7 @@ public class ProfitEntryFrame extends JFrame {
         button.setForeground(Color.WHITE);
         button.setFocusPainted(false);
         button.setBorder(BorderFactory.createEmptyBorder(5, 15, 5, 15));
-        button.setToolTipText(text); // HCI: Tooltips for clarity
+        button.setToolTipText(text);
         button.addMouseListener(new MouseAdapter() {
             @Override
             public void mouseEntered(MouseEvent e) {
@@ -97,19 +101,12 @@ public class ProfitEntryFrame extends JFrame {
         panel.setBackground(Color.WHITE);
         panel.setBorder(new EmptyBorder(10, 10, 10, 10));
 
-        panel.add(new JLabel("Profit ID:"));
-        JTextField profitIdField = new JTextField(String.format("PRF-%03d", nextProfitId));
-        profitIdField.setFont(new Font("Arial", Font.PLAIN, 14));
-        profitIdField.setEditable(false);
-        panel.add(profitIdField);
-
         panel.add(new JLabel("Date:"));
         dateField = new JTextField("dd-MM-yyyy");
         dateField.setFont(new Font("Arial", Font.PLAIN, 14));
         dateField.setForeground(Color.GRAY);
         dateField.setBorder(defaultBorder);
         dateField.setToolTipText("Enter date in dd-MM-yyyy format (e.g., 21-05-2025) or double-click for today");
-        // HCI: Placeholder behavior
         dateField.addFocusListener(new FocusAdapter() {
             @Override
             public void focusGained(FocusEvent e) {
@@ -127,7 +124,6 @@ public class ProfitEntryFrame extends JFrame {
                 }
             }
         });
-        // HCI: Double-click to fill current date
         dateField.addMouseListener(new MouseAdapter() {
             @Override
             public void mouseClicked(MouseEvent e) {
@@ -168,7 +164,6 @@ public class ProfitEntryFrame extends JFrame {
         JButton monthlyReportButton = createStyledButton("Monthly Report");
         JButton quarterlyReportButton = createStyledButton("Quarterly Report");
         JButton yearlyReportButton = createStyledButton("Yearly Report");
-        JButton backButton = createStyledButton("Back");
 
         addProfitButton.addActionListener(e -> addProfit());
         deleteProfitButton.addActionListener(e -> deleteProfit());
@@ -177,10 +172,6 @@ public class ProfitEntryFrame extends JFrame {
         monthlyReportButton.addActionListener(e -> generateMonthlyReport());
         quarterlyReportButton.addActionListener(e -> generateQuarterlyReport());
         yearlyReportButton.addActionListener(e -> generateYearlyReport());
-        backButton.addActionListener(e -> {
-            dispose();
-            new MainDashboard();
-        });
 
         buttonPanel.add(addProfitButton);
         buttonPanel.add(deleteProfitButton);
@@ -189,7 +180,6 @@ public class ProfitEntryFrame extends JFrame {
         buttonPanel.add(monthlyReportButton);
         buttonPanel.add(quarterlyReportButton);
         buttonPanel.add(yearlyReportButton);
-        buttonPanel.add(backButton);
 
         return buttonPanel;
     }
@@ -203,7 +193,6 @@ public class ProfitEntryFrame extends JFrame {
         sdf.setLenient(false);
         try {
             Date date = sdf.parse(dateStr);
-            // Prevent future dates
             if (date.after(new Date())) {
                 field.setBorder(errorBorder);
                 return false;
@@ -216,11 +205,28 @@ public class ProfitEntryFrame extends JFrame {
         }
     }
 
+    private void loadProfitData() {
+        profitTableModel.setRowCount(0);
+        try (Connection conn = DriverManager.getConnection(DB_URL, DB_USER, DB_PASSWORD);
+             Statement stmt = conn.createStatement();
+             ResultSet rs = stmt.executeQuery("SELECT profit_id, profit_date, amount, remarks FROM profits ORDER BY profit_date DESC")) {
+            while (rs.next()) {
+                profitTableModel.addRow(new Object[]{
+                        rs.getInt("profit_id"), // Store profit_id
+                        new SimpleDateFormat("dd-MM-yyyy").format(rs.getDate("profit_date")),
+                        rs.getBigDecimal("amount"),
+                        rs.getString("remarks")
+                });
+            }
+        } catch (SQLException ex) {
+            JOptionPane.showMessageDialog(this, "Error loading profit data: " + ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
+        }
+    }
+
     private void addProfit() {
-        JTextField profitIdField = (JTextField) ((JPanel) ((JPanel) getContentPane().getComponent(0)).getComponent(1)).getComponent(1);
         try {
-            String date = dateField.getText().trim();
-            if (!validateDate(date, dateField)) {
+            String dateStr = dateField.getText().trim();
+            if (!validateDate(dateStr, dateField)) {
                 JOptionPane.showMessageDialog(this, "Invalid or future date. Use dd-MM-yyyy (e.g., 21-05-2025).", "Error", JOptionPane.ERROR_MESSAGE);
                 return;
             }
@@ -233,25 +239,40 @@ public class ProfitEntryFrame extends JFrame {
             amountField.setBorder(defaultBorder);
             String remarks = remarksField.getText().trim();
 
-            DataManager dataManager = DataManager.getInstance();
-            DataManager.Profit profit = new DataManager.Profit(nextProfitId, date, amount, remarks);
-            dataManager.addProfit(profit);
+            SimpleDateFormat sdf = new SimpleDateFormat("dd-MM-yyyy");
+            Date parsedDate = sdf.parse(dateStr);
+            String sqlDate = new SimpleDateFormat("yyyy-MM-dd").format(parsedDate);
 
-            profitTableModel.addRow(new Object[]{
-                    profitIdField.getText(),
-                    profit.date,
-                    profit.amount,
-                    profit.remarks
-            });
+            try (Connection conn = DriverManager.getConnection(DB_URL, DB_USER, DB_PASSWORD);
+                 PreparedStatement pstmt = conn.prepareStatement(
+                         "INSERT INTO profits (profit_date, amount, remarks) VALUES (?, ?, ?)",
+                         Statement.RETURN_GENERATED_KEYS)) {
+                pstmt.setString(1, sqlDate);
+                pstmt.setBigDecimal(2, BigDecimal.valueOf(amount));
+                pstmt.setString(3, remarks.isEmpty() ? null : remarks);
+                pstmt.executeUpdate();
 
-            nextProfitId++;
-            profitIdField.setText(String.format("PRF-%03d", nextProfitId));
-            clearForm();
+                ResultSet rs = pstmt.getGeneratedKeys();
+                int newId = rs.next() ? rs.getInt(1) : 0;
 
-            JOptionPane.showMessageDialog(this, "Profit added successfully!", "Success", JOptionPane.INFORMATION_MESSAGE);
+                profitTableModel.addRow(new Object[]{
+                        newId, // Store new profit_id
+                        dateStr,
+                        amount,
+                        remarks
+                });
+
+                clearForm();
+                JOptionPane.showMessageDialog(this, "Profit added successfully!", "Success", JOptionPane.INFORMATION_MESSAGE);
+            } catch (SQLException ex) {
+                JOptionPane.showMessageDialog(this, "Error adding profit: " + ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
+            }
         } catch (NumberFormatException ex) {
             amountField.setBorder(errorBorder);
             JOptionPane.showMessageDialog(this, "Invalid profit amount. Please enter a valid number.", "Error", JOptionPane.ERROR_MESSAGE);
+        } catch (ParseException ex) {
+            dateField.setBorder(errorBorder);
+            JOptionPane.showMessageDialog(this, "Invalid date format. Use dd-MM-yyyy.", "Error", JOptionPane.ERROR_MESSAGE);
         }
     }
 
@@ -260,11 +281,16 @@ public class ProfitEntryFrame extends JFrame {
         if (selectedRow != -1) {
             int confirm = JOptionPane.showConfirmDialog(this, "Are you sure you want to delete this profit entry?", "Confirm Delete", JOptionPane.YES_NO_OPTION);
             if (confirm == JOptionPane.YES_OPTION) {
-                DataManager dataManager = DataManager.getInstance();
-                dataManager.removeProfit(dataManager.getProfits().get(selectedRow));
-                profitTableModel.removeRow(selectedRow);
-
-                JOptionPane.showMessageDialog(this, "Profit deleted successfully!", "Success", JOptionPane.INFORMATION_MESSAGE);
+                int profitId = (int) profitTableModel.getValueAt(selectedRow, 0); // Get profit_id from first column
+                try (Connection conn = DriverManager.getConnection(DB_URL, DB_USER, DB_PASSWORD);
+                     PreparedStatement pstmt = conn.prepareStatement("DELETE FROM profits WHERE profit_id = ?")) {
+                    pstmt.setInt(1, profitId);
+                    pstmt.executeUpdate();
+                    profitTableModel.removeRow(selectedRow);
+                    JOptionPane.showMessageDialog(this, "Profit deleted successfully!", "Success", JOptionPane.INFORMATION_MESSAGE);
+                } catch (SQLException ex) {
+                    JOptionPane.showMessageDialog(this, "Error deleting profit: " + ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
+                }
             }
         } else {
             JOptionPane.showMessageDialog(this, "Please select a profit entry to delete.", "Error", JOptionPane.ERROR_MESSAGE);
@@ -287,7 +313,6 @@ public class ProfitEntryFrame extends JFrame {
         reportDateField.setForeground(Color.GRAY);
         reportDateField.setBorder(defaultBorder);
         reportDateField.setToolTipText("Enter date in dd-MM-yyyy format (e.g., 21-05-2025) or double-click for today");
-        // HCI: Placeholder behavior
         reportDateField.addFocusListener(new FocusAdapter() {
             @Override
             public void focusGained(FocusEvent e) {
@@ -305,7 +330,6 @@ public class ProfitEntryFrame extends JFrame {
                 }
             }
         });
-        // HCI: Double-click to fill current date
         reportDateField.addMouseListener(new MouseAdapter() {
             @Override
             public void mouseClicked(MouseEvent e) {
@@ -330,35 +354,52 @@ public class ProfitEntryFrame extends JFrame {
             return;
         }
 
-        DataManager dataManager = DataManager.getInstance();
-        double totalProfit = 0;
-        StringBuilder report = new StringBuilder();
-        report.append("Daily Profit Report (").append(selectedDate).append(")\n\n");
+        try {
+            SimpleDateFormat sdf = new SimpleDateFormat("dd-MM-yyyy");
+            Date parsedDate = sdf.parse(selectedDate);
+            String sqlDate = new SimpleDateFormat("yyyy-MM-dd").format(parsedDate);
 
-        for (DataManager.Profit profit : dataManager.getProfits()) {
-            if (profit.date.equals(selectedDate)) {
-                totalProfit += profit.amount;
-                report.append(String.format("ID: PRF-%d, Date: %s, Amount: %.2f, Remarks: %s\n",
-                        profit.id, profit.date, profit.amount, profit.remarks));
+            try (Connection conn = DriverManager.getConnection(DB_URL, DB_USER, DB_PASSWORD);
+                 PreparedStatement pstmt = conn.prepareStatement(
+                         "SELECT profit_id, profit_date, amount, remarks FROM profits WHERE profit_date = ?")) {
+                pstmt.setString(1, sqlDate);
+                ResultSet rs = pstmt.executeQuery();
+
+                double totalProfit = 0;
+                StringBuilder report = new StringBuilder();
+                report.append("Daily Profit Report (").append(selectedDate).append(")\n\n");
+
+                while (rs.next()) {
+                    double amount = rs.getBigDecimal("amount").doubleValue();
+                    totalProfit += amount;
+                    report.append(String.format("ID: PRF-%d, Date: %s, Amount: %.2f, Remarks: %s\n",
+                            rs.getInt("profit_id"),
+                            new SimpleDateFormat("dd-MM-yyyy").format(rs.getDate("profit_date")),
+                            amount,
+                            rs.getString("remarks") != null ? rs.getString("remarks") : ""));
+                }
+                report.append(String.format("\nTotal Profit: %.2f", totalProfit));
+
+                JTextArea reportArea = new JTextArea(report.toString());
+                reportArea.setFont(new Font("Arial", Font.PLAIN, 14));
+                reportArea.setEditable(false);
+                JScrollPane reportScroll = new JScrollPane(reportArea);
+                reportScroll.setPreferredSize(new Dimension(400, 300));
+                JOptionPane.showMessageDialog(this, reportScroll, "Daily Profit Report", JOptionPane.INFORMATION_MESSAGE);
+            } catch (SQLException ex) {
+                JOptionPane.showMessageDialog(this, "Error generating daily report: " + ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
             }
+        } catch (ParseException ex) {
+            JOptionPane.showMessageDialog(this, "Invalid date format. Use dd-MM-yyyy.", "Error", JOptionPane.ERROR_MESSAGE);
         }
-        report.append(String.format("\nTotal Profit: %.2f", totalProfit));
-
-        JTextArea reportArea = new JTextArea(report.toString());
-        reportArea.setFont(new Font("Arial", Font.PLAIN, 14));
-        reportArea.setEditable(false);
-        JScrollPane reportScroll = new JScrollPane(reportArea);
-        reportScroll.setPreferredSize(new Dimension(400, 300));
-        JOptionPane.showMessageDialog(this, reportScroll, "Daily Profit Report", JOptionPane.INFORMATION_MESSAGE);
     }
 
     private void generateMonthlyReport() {
-        // Dynamic year range: 10 years past to 10 years future
         ArrayList<String> monthYears = new ArrayList<>();
         Calendar cal = Calendar.getInstance();
-        int currentYear = cal.get(Calendar.YEAR); // Dynamically gets the current year
-        int pastYears = 0; // Configurable: years into the past
-        int futureYears = 30; // Configurable: years into the future
+        int currentYear = cal.get(Calendar.YEAR);
+        int pastYears = 0;
+        int futureYears = 30;
 
         for (int year = currentYear - pastYears; year <= currentYear + futureYears; year++) {
             for (int month = 1; month <= 12; month++) {
@@ -384,7 +425,6 @@ public class ProfitEntryFrame extends JFrame {
         String monthName = parts[0];
         int year = Integer.parseInt(parts[1]);
 
-        // Map month name to month number
         String[] monthNames = new String[]{"January", "February", "March", "April", "May", "June",
                 "July", "August", "September", "October", "November", "December"};
         int monthNumber = 0;
@@ -395,44 +435,45 @@ public class ProfitEntryFrame extends JFrame {
             }
         }
 
-        SimpleDateFormat sdf = new SimpleDateFormat("dd-MM-yyyy");
-        DataManager dataManager = DataManager.getInstance();
-        double totalProfit = 0;
+        try (Connection conn = DriverManager.getConnection(DB_URL, DB_USER, DB_PASSWORD);
+             PreparedStatement pstmt = conn.prepareStatement(
+                     "SELECT profit_id, profit_date, amount, remarks FROM profits WHERE YEAR(profit_date) = ? AND MONTH(profit_date) = ?")) {
+            pstmt.setInt(1, year);
+            pstmt.setInt(2, monthNumber);
+            ResultSet rs = pstmt.executeQuery();
 
-        for (DataManager.Profit profit : dataManager.getProfits()) {
-            try {
-                Date date = sdf.parse(profit.date);
-                Calendar profitCal = Calendar.getInstance();
-                profitCal.setTime(date);
-                int profitMonth = profitCal.get(Calendar.MONTH) + 1; // 1-12
-                int profitYear = profitCal.get(Calendar.YEAR);
-                if (profitYear == year && profitMonth == monthNumber) {
-                    totalProfit += profit.amount;
-                }
-            } catch (ParseException e) {
-                // Skip invalid dates
+            double totalProfit = 0;
+            StringBuilder report = new StringBuilder();
+            report.append("Monthly Profit Report (").append(selectedMonthYear).append(")\n\n");
+
+            while (rs.next()) {
+                double amount = rs.getBigDecimal("amount").doubleValue();
+                totalProfit += amount;
+                report.append(String.format("ID: PRF-%d, Date: %s, Amount: %.2f, Remarks: %s\n",
+                        rs.getInt("profit_id"),
+                        new SimpleDateFormat("dd-MM-yyyy").format(rs.getDate("profit_date")),
+                        amount,
+                        rs.getString("remarks") != null ? rs.getString("remarks") : ""));
             }
+            report.append(String.format("\nTotal Profit: %.2f", totalProfit));
+
+            JTextArea reportArea = new JTextArea(report.toString());
+            reportArea.setFont(new Font("Arial", Font.PLAIN, 14));
+            reportArea.setEditable(false);
+            JScrollPane reportScroll = new JScrollPane(reportArea);
+            reportScroll.setPreferredSize(new Dimension(400, 300));
+            JOptionPane.showMessageDialog(this, reportScroll, "Monthly Profit Report", JOptionPane.INFORMATION_MESSAGE);
+        } catch (SQLException ex) {
+            JOptionPane.showMessageDialog(this, "Error generating monthly report: " + ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
         }
-
-        StringBuilder report = new StringBuilder();
-        report.append("Monthly Profit Report (").append(selectedMonthYear).append(")\n\n");
-        report.append(String.format("Total Profit: %.2f", totalProfit));
-
-        JTextArea reportArea = new JTextArea(report.toString());
-        reportArea.setFont(new Font("Arial", Font.PLAIN, 14));
-        reportArea.setEditable(false);
-        JScrollPane reportScroll = new JScrollPane(reportArea);
-        reportScroll.setPreferredSize(new Dimension(400, 300));
-        JOptionPane.showMessageDialog(this, reportScroll, "Monthly Profit Report", JOptionPane.INFORMATION_MESSAGE);
     }
 
     private void generateQuarterlyReport() {
-        // Dynamic year range: 10 years past to 10 years future
         ArrayList<String> halfYears = new ArrayList<>();
         Calendar cal = Calendar.getInstance();
-        int currentYear = cal.get(Calendar.YEAR); // Dynamically gets the current year
-        int pastYears = 1; // Configurable: years into the past
-        int futureYears = 30; // Configurable: years into the future
+        int currentYear = cal.get(Calendar.YEAR);
+        int pastYears = 1;
+        int futureYears = 30;
 
         for (int year = currentYear - pastYears; year <= currentYear + futureYears; year++) {
             halfYears.add("1st Half " + year);
@@ -455,45 +496,46 @@ public class ProfitEntryFrame extends JFrame {
         int startMonth = half.equals("1st") ? 1 : 7;
         int endMonth = half.equals("1st") ? 6 : 12;
 
-        SimpleDateFormat sdf = new SimpleDateFormat("dd-MM-yyyy");
-        DataManager dataManager = DataManager.getInstance();
-        double totalProfit = 0;
-        StringBuilder report = new StringBuilder();
-        report.append("Quarterly Profit Report (").append(selectedHalfYear).append(")\n\n");
+        try (Connection conn = DriverManager.getConnection(DB_URL, DB_USER, DB_PASSWORD);
+             PreparedStatement pstmt = conn.prepareStatement(
+                     "SELECT profit_id, profit_date, amount, remarks FROM profits WHERE YEAR(profit_date) = ? AND MONTH(profit_date) BETWEEN ? AND ?")) {
+            pstmt.setInt(1, year);
+            pstmt.setInt(2, startMonth);
+            pstmt.setInt(3, endMonth);
+            ResultSet rs = pstmt.executeQuery();
 
-        for (DataManager.Profit profit : dataManager.getProfits()) {
-            try {
-                Date date = sdf.parse(profit.date);
-                Calendar calProfit = Calendar.getInstance();
-                calProfit.setTime(date);
-                int profitMonth = calProfit.get(Calendar.MONTH) + 1;
-                int profitYear = calProfit.get(Calendar.YEAR);
-                if (profitYear == year && profitMonth >= startMonth && profitMonth <= endMonth) {
-                    totalProfit += profit.amount;
-                    report.append(String.format("ID: PRF-%d, Date: %s, Amount: %.2f, Remarks: %s\n",
-                            profit.id, profit.date, profit.amount, profit.remarks));
-                }
-            } catch (ParseException e) {
-                // Skip invalid dates
+            double totalProfit = 0;
+            StringBuilder report = new StringBuilder();
+            report.append("Quarterly Profit Report (").append(selectedHalfYear).append(")\n\n");
+
+            while (rs.next()) {
+                double amount = rs.getBigDecimal("amount").doubleValue();
+                totalProfit += amount;
+                report.append(String.format("ID: PRF-%d, Date: %s, Amount: %.2f, Remarks: %s\n",
+                        rs.getInt("profit_id"),
+                        new SimpleDateFormat("dd-MM-yyyy").format(rs.getDate("profit_date")),
+                        amount,
+                        rs.getString("remarks") != null ? rs.getString("remarks") : ""));
             }
-        }
-        report.append(String.format("\nTotal Profit: %.2f", totalProfit));
+            report.append(String.format("\nTotal Profit: %.2f", totalProfit));
 
-        JTextArea reportArea = new JTextArea(report.toString());
-        reportArea.setFont(new Font("Arial", Font.PLAIN, 14));
-        reportArea.setEditable(false);
-        JScrollPane reportScroll = new JScrollPane(reportArea);
-        reportScroll.setPreferredSize(new Dimension(400, 300));
-        JOptionPane.showMessageDialog(this, reportScroll, "Quarterly Profit Report", JOptionPane.INFORMATION_MESSAGE);
+            JTextArea reportArea = new JTextArea(report.toString());
+            reportArea.setFont(new Font("Arial", Font.PLAIN, 14));
+            reportArea.setEditable(false);
+            JScrollPane reportScroll = new JScrollPane(reportArea);
+            reportScroll.setPreferredSize(new Dimension(400, 300));
+            JOptionPane.showMessageDialog(this, reportScroll, "Quarterly Profit Report", JOptionPane.INFORMATION_MESSAGE);
+        } catch (SQLException ex) {
+            JOptionPane.showMessageDialog(this, "Error generating quarterly report: " + ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
+        }
     }
 
     private void generateYearlyReport() {
-        // Dynamic year range: 10 years past to 10 years future
         ArrayList<String> years = new ArrayList<>();
         Calendar cal = Calendar.getInstance();
-        int currentYear = cal.get(Calendar.YEAR); // Dynamically gets the current year
-        int pastYears = 1; // Configurable: years into the past
-        int futureYears = 30; // Configurable: years into the future
+        int currentYear = cal.get(Calendar.YEAR);
+        int pastYears = 1;
+        int futureYears = 30;
 
         for (int year = currentYear - pastYears; year <= currentYear + futureYears; year++) {
             years.add(String.valueOf(year));
@@ -509,35 +551,37 @@ public class ProfitEntryFrame extends JFrame {
         if (result != JOptionPane.OK_OPTION) return;
 
         String selectedYear = (String) yearCombo.getSelectedItem();
-        SimpleDateFormat sdf = new SimpleDateFormat("dd-MM-yyyy");
-        DataManager dataManager = DataManager.getInstance();
-        double totalProfit = 0;
-        StringBuilder report = new StringBuilder();
-        report.append("Yearly Profit Report (").append(selectedYear).append(")\n\n");
 
-        for (DataManager.Profit profit : dataManager.getProfits()) {
-            try {
-                Date date = sdf.parse(profit.date);
-                Calendar calProfit = Calendar.getInstance();
-                calProfit.setTime(date);
-                int profitYear = calProfit.get(Calendar.YEAR);
-                if (profitYear == Integer.parseInt(selectedYear)) {
-                    totalProfit += profit.amount;
-                    report.append(String.format("ID: PRF-%d, Date: %s, Amount: %.2f, Remarks: %s\n",
-                            profit.id, profit.date, profit.amount, profit.remarks));
-                }
-            } catch (ParseException e) {
-                // Skip invalid dates
+        try (Connection conn = DriverManager.getConnection(DB_URL, DB_USER, DB_PASSWORD);
+             PreparedStatement pstmt = conn.prepareStatement(
+                     "SELECT profit_id, profit_date, amount, remarks FROM profits WHERE YEAR(profit_date) = ?")) {
+            pstmt.setInt(1, Integer.parseInt(selectedYear));
+            ResultSet rs = pstmt.executeQuery();
+
+            double totalProfit = 0;
+            StringBuilder report = new StringBuilder();
+            report.append("Yearly Profit Report (").append(selectedYear).append(")\n\n");
+
+            while (rs.next()) {
+                double amount = rs.getBigDecimal("amount").doubleValue();
+                totalProfit += amount;
+                report.append(String.format("ID: PRF-%d, Date: %s, Amount: %.2f, Remarks: %s\n",
+                        rs.getInt("profit_id"),
+                        new SimpleDateFormat("dd-MM-yyyy").format(rs.getDate("profit_date")),
+                        amount,
+                        rs.getString("remarks") != null ? rs.getString("remarks") : ""));
             }
-        }
-        report.append(String.format("\nTotal Profit: %.2f", totalProfit));
+            report.append(String.format("\nTotal Profit: %.2f", totalProfit));
 
-        JTextArea reportArea = new JTextArea(report.toString());
-        reportArea.setFont(new Font("Arial", Font.PLAIN, 14));
-        reportArea.setEditable(false);
-        JScrollPane reportScroll = new JScrollPane(reportArea);
-        reportScroll.setPreferredSize(new Dimension(400, 300));
-        JOptionPane.showMessageDialog(this, reportScroll, "Yearly Profit Report", JOptionPane.INFORMATION_MESSAGE);
+            JTextArea reportArea = new JTextArea(report.toString());
+            reportArea.setFont(new Font("Arial", Font.PLAIN, 14));
+            reportArea.setEditable(false);
+            JScrollPane reportScroll = new JScrollPane(reportArea);
+            reportScroll.setPreferredSize(new Dimension(400, 300));
+            JOptionPane.showMessageDialog(this, reportScroll, "Yearly Profit Report", JOptionPane.INFORMATION_MESSAGE);
+        } catch (SQLException ex) {
+            JOptionPane.showMessageDialog(this, "Error generating yearly report: " + ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
+        }
     }
 
     public static void main(String[] args) {

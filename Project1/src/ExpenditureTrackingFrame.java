@@ -3,144 +3,191 @@ import javax.swing.border.EmptyBorder;
 import javax.swing.table.DefaultTableModel;
 import java.awt.*;
 import java.awt.event.*;
+import java.sql.*;
 import java.text.SimpleDateFormat;
-import java.util.*;
 import java.text.ParseException;
+import java.util.*;
+import java.util.Date;
 
 public class ExpenditureTrackingFrame extends JFrame {
     private DefaultTableModel expenseTableModel;
     private JTable expenseTable;
-    private static int nextExpenseId = 1;
+    private static final String DB_URL = "jdbc:mysql://localhost:3306/zaibautos";
+    private static final String DB_USER = "root";
+    private static final String DB_PASSWORD = "root";
 
     public ExpenditureTrackingFrame() {
         setTitle("Zaib Autos - Expenditure Tracking");
-        setSize(1000, 600);
+        setSize(800, 600);
         setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
         setLocationRelativeTo(null);
-        setLayout(new BorderLayout());
+        setLayout(new BorderLayout(10, 10));
 
-        JPanel mainPanel = new JPanel(new BorderLayout(10, 10));
+        JPanel mainPanel = new JPanel(new BorderLayout(10, 5));
         mainPanel.setBorder(new EmptyBorder(10, 10, 10, 10));
         mainPanel.setBackground(Color.WHITE);
 
         JLabel titleLabel = new JLabel("Expenditure Tracking");
-        titleLabel.setFont(new Font("Arial", Font.BOLD, 20));
+        titleLabel.setFont(new Font("Segoe UI", Font.BOLD, 14));
+        titleLabel.setForeground(new Color(50, 50, 50));
+        titleLabel.setHorizontalAlignment(JLabel.CENTER);
         mainPanel.add(titleLabel, BorderLayout.NORTH);
 
+        JPanel inputTablePanel = new JPanel(new GridBagLayout());
+        inputTablePanel.setBackground(Color.WHITE);
+
         JPanel formPanel = createFormPanel();
-        mainPanel.add(formPanel, BorderLayout.WEST);
+        formPanel.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createEmptyBorder(5, 0, 5, 0),
+                BorderFactory.createLineBorder(new Color(200, 200, 200))
+        ));
+        formPanel.setPreferredSize(new Dimension(230, 400));
+        GridBagConstraints gbcForm = new GridBagConstraints();
+        gbcForm.gridx = 0;
+        gbcForm.gridy = 0;
+        gbcForm.weightx = 0.4;
+        gbcForm.fill = GridBagConstraints.BOTH;
+        inputTablePanel.add(formPanel, gbcForm);
 
         expenseTableModel = new DefaultTableModel(new String[]{
-                "Expense ID", "Date", "Category", "Supplier", "Description", "Amount", "Payment Type"
+                "Date", "Description", "Amount", "Payment Type"
         }, 0);
         expenseTable = new JTable(expenseTableModel);
-        expenseTable.setFont(new Font("Arial", Font.PLAIN, 14));
+        expenseTable.setFont(new Font("Segoe UI", Font.PLAIN, 12));
         expenseTable.setRowHeight(25);
-        expenseTable.setGridColor(new Color(200, 200, 200));
+        expenseTable.setGridColor(new Color(230, 230, 230));
         expenseTable.setShowGrid(true);
-        JScrollPane scrollPane = new JScrollPane(expenseTable);
-        mainPanel.add(scrollPane, BorderLayout.CENTER);
+        expenseTable.setIntercellSpacing(new Dimension(1, 1));
+        expenseTable.setSelectionBackground(new Color(0, 120, 215));
+        expenseTable.getTableHeader().setFont(new Font("Segoe UI", Font.BOLD, 12));
+        expenseTable.getTableHeader().setBackground(new Color(240, 240, 240));
+        JScrollPane tableScrollPane = new JScrollPane(expenseTable);
+        tableScrollPane.setPreferredSize(new Dimension(500, 400));
+        GridBagConstraints gbcTable = new GridBagConstraints();
+        gbcTable.gridx = 1;
+        gbcTable.gridy = 0;
+        gbcTable.weightx = 0.6;
+        gbcTable.fill = GridBagConstraints.BOTH;
+        inputTablePanel.add(tableScrollPane, gbcTable);
+
+        mainPanel.add(inputTablePanel, BorderLayout.CENTER);
 
         JPanel buttonPanel = createButtonPanel();
         mainPanel.add(buttonPanel, BorderLayout.SOUTH);
 
         add(mainPanel, BorderLayout.CENTER);
 
-        // Populate table with existing expenditures
-        DataManager dataManager = DataManager.getInstance();
-        for (DataManager.Expenditure expenditure : dataManager.getExpenditures()) {
-            expenseTableModel.addRow(new Object[]{
-                    "EXP-" + expenditure.id,
-                    expenditure.date,
-                    expenditure.category,
-                    expenditure.supplier != null ? expenditure.supplier.name : "N/A",
-                    expenditure.description,
-                    expenditure.amount,
-                    expenditure.paymentType
-            });
-        }
+        loadExpenses();
 
         setVisible(true);
     }
 
+    private Connection getConnection() throws SQLException {
+        return DriverManager.getConnection(DB_URL, DB_USER, DB_PASSWORD);
+    }
+
+    private void loadExpenses() {
+        expenseTableModel.setRowCount(0);
+        try (Connection conn = getConnection();
+             Statement stmt = conn.createStatement();
+             ResultSet rs = stmt.executeQuery("SELECT expenditure_date, description, amount, payment_type FROM expenditures")) {
+            SimpleDateFormat sdf = new SimpleDateFormat("dd-MM-yyyy");
+            while (rs.next()) {
+                expenseTableModel.addRow(new Object[]{
+                        sdf.format(rs.getDate("expenditure_date")),
+                        rs.getString("description"),
+                        rs.getDouble("amount"),
+                        rs.getString("payment_type")
+                });
+            }
+        } catch (SQLException e) {
+            JOptionPane.showMessageDialog(this, "Error loading expenses: " + e.getMessage(), "Database Error", JOptionPane.ERROR_MESSAGE);
+        }
+    }
+
     private JButton createStyledButton(String text) {
         JButton button = new JButton(text);
-        button.setFont(new Font("Arial", Font.BOLD, 14));
-        button.setBackground(new Color(70, 130, 180));
+        button.setFont(new Font("Segoe UI", Font.BOLD, 12));
+        button.setBackground(new Color(0, 120, 215));
         button.setForeground(Color.WHITE);
         button.setFocusPainted(false);
-        button.setBorder(BorderFactory.createEmptyBorder(5, 15, 5, 15));
+        button.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createLineBorder(new Color(0, 100, 200), 1),
+                BorderFactory.createEmptyBorder(5, 15, 5, 15)
+        ));
+        button.setPreferredSize(new Dimension(120, 30));
         button.addMouseListener(new MouseAdapter() {
             @Override
             public void mouseEntered(MouseEvent e) {
-                button.setBackground(new Color(100, 150, 200));
+                button.setBackground(new Color(0, 140, 255));
             }
-
             @Override
             public void mouseExited(MouseEvent e) {
-                button.setBackground(new Color(70, 130, 180));
+                button.setBackground(new Color(0, 120, 215));
             }
         });
         return button;
     }
 
     private JPanel createFormPanel() {
-        JPanel panel = new JPanel(new GridLayout(7, 2, 5, 5));
+        JPanel panel = new JPanel(new GridBagLayout());
         panel.setBackground(Color.WHITE);
-        panel.setBorder(new EmptyBorder(10, 10, 10, 10));
+        GridBagConstraints gbc = new GridBagConstraints();
+        gbc.insets = new Insets(5, 5, 5, 5);
+        gbc.fill = GridBagConstraints.HORIZONTAL;
 
-        panel.add(new JLabel("Expense ID:"));
-        JTextField expenseIdField = new JTextField(String.format("EXP-%03d", nextExpenseId));
-        expenseIdField.setFont(new Font("Arial", Font.PLAIN, 14));
-        expenseIdField.setEditable(false);
-        panel.add(expenseIdField);
+        gbc.gridx = 0; gbc.gridy = 0;
+        JLabel dateLabel = new JLabel("Date:");
+        dateLabel.setFont(new Font("Segoe UI", Font.BOLD, 12));
+        panel.add(dateLabel, gbc);
 
-        panel.add(new JLabel("Date:"));
+        gbc.gridx = 1; gbc.gridy = 0;
         JTextField dateField = new JTextField(new SimpleDateFormat("dd-MM-yyyy").format(new Date()));
-        dateField.setFont(new Font("Arial", Font.PLAIN, 14));
-        panel.add(dateField);
+        dateField.setFont(new Font("Segoe UI", Font.PLAIN, 12));
+        dateField.setPreferredSize(new Dimension(120, 25));
+        panel.add(dateField, gbc);
 
-        panel.add(new JLabel("Category:"));
-        JComboBox<String> categoryCombo = new JComboBox<>(new String[]{"Operational", "Supplier Payment", "Miscellaneous"});
-        categoryCombo.setFont(new Font("Arial", Font.PLAIN, 14));
-        panel.add(categoryCombo);
+        gbc.gridx = 0; gbc.gridy = 1;
+        JLabel descriptionLabel = new JLabel("Description:");
+        descriptionLabel.setFont(new Font("Segoe UI", Font.BOLD, 12));
+        panel.add(descriptionLabel, gbc);
 
-        panel.add(new JLabel("Supplier:"));
-        DataManager dataManager = DataManager.getInstance();
-        JComboBox<DataManager.Supplier> supplierCombo = new JComboBox<>();
-        supplierCombo.addItem(null); // Allow no supplier
-        for (DataManager.Supplier supplier : dataManager.getSuppliers()) {
-            supplierCombo.addItem(supplier);
-        }
-        supplierCombo.setFont(new Font("Arial", Font.PLAIN, 14));
-        panel.add(supplierCombo);
-
-        panel.add(new JLabel("Description:"));
+        gbc.gridx = 1; gbc.gridy = 1;
         JTextField descriptionField = new JTextField();
-        descriptionField.setFont(new Font("Arial", Font.PLAIN, 14));
-        panel.add(descriptionField);
+        descriptionField.setFont(new Font("Segoe UI", Font.PLAIN, 12));
+        descriptionField.setPreferredSize(new Dimension(120, 25));
+        panel.add(descriptionField, gbc);
 
-        panel.add(new JLabel("Amount:"));
+        gbc.gridx = 0; gbc.gridy = 2;
+        JLabel amountLabel = new JLabel("Amount:");
+        amountLabel.setFont(new Font("Segoe UI", Font.BOLD, 12));
+        panel.add(amountLabel, gbc);
+
+        gbc.gridx = 1; gbc.gridy = 2;
         JTextField amountField = new JTextField("0");
-        amountField.setFont(new Font("Arial", Font.PLAIN, 14));
-        panel.add(amountField);
+        amountField.setFont(new Font("Segoe UI", Font.PLAIN, 12));
+        amountField.setPreferredSize(new Dimension(120, 25));
+        panel.add(amountField, gbc);
 
-        panel.add(new JLabel("Payment Type:"));
+        gbc.gridx = 0; gbc.gridy = 3;
+        JLabel paymentTypeLabel = new JLabel("Payment Type:");
+        paymentTypeLabel.setFont(new Font("Segoe UI", Font.BOLD, 12));
+        panel.add(paymentTypeLabel, gbc);
+
+        gbc.gridx = 1; gbc.gridy = 3;
         JComboBox<String> paymentTypeCombo = new JComboBox<>(new String[]{"Cash", "Jazzcash", "Bank"});
-        paymentTypeCombo.setFont(new Font("Arial", Font.PLAIN, 14));
-        panel.add(paymentTypeCombo);
+        paymentTypeCombo.setFont(new Font("Segoe UI", Font.PLAIN, 12));
+        paymentTypeCombo.setPreferredSize(new Dimension(120, 25));
+        panel.add(paymentTypeCombo, gbc);
 
         return panel;
     }
 
     private void addExpense() {
-        JTextField expenseIdField = (JTextField) ((JPanel) ((JPanel) getContentPane().getComponent(0)).getComponent(1)).getComponent(1);
-        JTextField dateField = (JTextField) ((JPanel) ((JPanel) getContentPane().getComponent(0)).getComponent(1)).getComponent(3);
-        JComboBox<String> categoryCombo = (JComboBox<String>) ((JPanel) ((JPanel) getContentPane().getComponent(0)).getComponent(1)).getComponent(5);
-        JComboBox<DataManager.Supplier> supplierCombo = (JComboBox<DataManager.Supplier>) ((JPanel) ((JPanel) getContentPane().getComponent(0)).getComponent(1)).getComponent(7);
-        JTextField descriptionField = (JTextField) ((JPanel) ((JPanel) getContentPane().getComponent(0)).getComponent(1)).getComponent(9);
-        JTextField amountField = (JTextField) ((JPanel) ((JPanel) getContentPane().getComponent(0)).getComponent(1)).getComponent(11);
-        JComboBox<String> paymentTypeCombo = (JComboBox<String>) ((JPanel) ((JPanel) getContentPane().getComponent(0)).getComponent(1)).getComponent(13);
+        JTextField dateField = (JTextField) ((JPanel) ((JPanel) ((JPanel) getContentPane().getComponent(0)).getComponent(1)).getComponent(0)).getComponent(1);
+        JTextField descriptionField = (JTextField) ((JPanel) ((JPanel) ((JPanel) getContentPane().getComponent(0)).getComponent(1)).getComponent(0)).getComponent(3);
+        JTextField amountField = (JTextField) ((JPanel) ((JPanel) ((JPanel) getContentPane().getComponent(0)).getComponent(1)).getComponent(0)).getComponent(5);
+        JComboBox<String> paymentTypeCombo = (JComboBox<String>) ((JPanel) ((JPanel) ((JPanel) getContentPane().getComponent(0)).getComponent(1)).getComponent(0)).getComponent(7);
 
         try {
             double amount = Double.parseDouble(amountField.getText().trim());
@@ -154,50 +201,38 @@ public class ExpenditureTrackingFrame extends JFrame {
                 return;
             }
             String date = dateField.getText().trim();
-            // Basic date validation
+            SimpleDateFormat sdf = new SimpleDateFormat("dd-MM-yyyy");
+            sdf.setLenient(false);
+            Date parsedDate;
             try {
-                new SimpleDateFormat("dd-MM-yyyy").parse(date);
-            } catch (Exception e) {
+                parsedDate = sdf.parse(date);
+            } catch (ParseException e) {
                 JOptionPane.showMessageDialog(this, "Invalid date format. Use dd-MM-yyyy.", "Error", JOptionPane.ERROR_MESSAGE);
                 return;
             }
 
-            DataManager dataManager = DataManager.getInstance();
-            DataManager.Expenditure expenditure = new DataManager.Expenditure(
-                    nextExpenseId,
-                    date,
-                    (String) categoryCombo.getSelectedItem(),
-                    (DataManager.Supplier) supplierCombo.getSelectedItem(),
-                    description,
-                    amount,
-                    (String) paymentTypeCombo.getSelectedItem()
-            );
-            dataManager.addExpenditure(expenditure);
+            try (Connection conn = getConnection();
+                 PreparedStatement pstmt = conn.prepareStatement(
+                         "INSERT INTO expenditures (expenditure_date, description, amount, payment_type) VALUES (?, ?, ?, ?)",
+                         Statement.RETURN_GENERATED_KEYS)) {
+                pstmt.setDate(1, new java.sql.Date(parsedDate.getTime()));
+                pstmt.setString(2, description);
+                pstmt.setDouble(3, amount);
+                pstmt.setString(4, (String) paymentTypeCombo.getSelectedItem());
+                pstmt.executeUpdate();
 
-            expenseTableModel.addRow(new Object[]{
-                    expenseIdField.getText(),
-                    expenditure.date,
-                    expenditure.category,
-                    expenditure.supplier != null ? expenditure.supplier.name : "N/A",
-                    expenditure.description,
-                    expenditure.amount,
-                    expenditure.paymentType
-            });
+                expenseTableModel.addRow(new Object[]{
+                        date,
+                        description,
+                        amount,
+                        (String) paymentTypeCombo.getSelectedItem()
+                });
 
-            // Update supplier ledger if supplier payment
-            if (expenditure.supplier != null && expenditure.category.equals("Supplier Payment")) {
-                // Simulate adding to SupplierLedgerFrame's ledger
-                int supplierIndex = dataManager.getSuppliers().indexOf(expenditure.supplier);
-                if (supplierIndex != -1) {
-                    JOptionPane.showMessageDialog(this, "Supplier payment recorded. Please check Supplier Ledger for " + expenditure.supplier.name, "Info", JOptionPane.INFORMATION_MESSAGE);
-                }
+                clearForm();
+                JOptionPane.showMessageDialog(this, "Expense added successfully!", "Success", JOptionPane.INFORMATION_MESSAGE);
+            } catch (SQLException e) {
+                JOptionPane.showMessageDialog(this, "Error adding expense: " + e.getMessage(), "Database Error", JOptionPane.ERROR_MESSAGE);
             }
-
-            nextExpenseId++;
-            expenseIdField.setText(String.format("EXP-%03d", nextExpenseId));
-            clearForm();
-
-            JOptionPane.showMessageDialog(this, "Expense added successfully!", "Success", JOptionPane.INFORMATION_MESSAGE);
         } catch (NumberFormatException ex) {
             JOptionPane.showMessageDialog(this, "Invalid amount. Please enter a valid number.", "Error", JOptionPane.ERROR_MESSAGE);
         }
@@ -208,11 +243,25 @@ public class ExpenditureTrackingFrame extends JFrame {
         if (selectedRow != -1) {
             int confirm = JOptionPane.showConfirmDialog(this, "Are you sure you want to delete this expense?", "Confirm Delete", JOptionPane.YES_NO_OPTION);
             if (confirm == JOptionPane.YES_OPTION) {
-                DataManager dataManager = DataManager.getInstance();
-                dataManager.removeExpenditure(dataManager.getExpenditures().get(selectedRow));
-                expenseTableModel.removeRow(selectedRow);
+                try (Connection conn = getConnection();
+                     PreparedStatement pstmt = conn.prepareStatement(
+                             "DELETE FROM expenditures WHERE expenditure_date = ? AND description = ? AND amount = ? AND payment_type = ?")) {
+                    String dateStr = (String) expenseTableModel.getValueAt(selectedRow, 0);
+                    SimpleDateFormat sdf = new SimpleDateFormat("dd-MM-yyyy");
+                    Date parsedDate = sdf.parse(dateStr);
+                    pstmt.setDate(1, new java.sql.Date(parsedDate.getTime()));
+                    pstmt.setString(2, (String) expenseTableModel.getValueAt(selectedRow, 1));
+                    pstmt.setDouble(3, (Double) expenseTableModel.getValueAt(selectedRow, 2));
+                    pstmt.setString(4, (String) expenseTableModel.getValueAt(selectedRow, 3));
+                    pstmt.executeUpdate();
 
-                JOptionPane.showMessageDialog(this, "Expense deleted successfully!", "Success", JOptionPane.INFORMATION_MESSAGE);
+                    expenseTableModel.removeRow(selectedRow);
+                    JOptionPane.showMessageDialog(this, "Expense deleted successfully!", "Success", JOptionPane.INFORMATION_MESSAGE);
+                } catch (SQLException e) {
+                    JOptionPane.showMessageDialog(this, "Error deleting expense: " + e.getMessage(), "Database Error", JOptionPane.ERROR_MESSAGE);
+                } catch (ParseException e) {
+                    JOptionPane.showMessageDialog(this, "Error parsing date: " + e.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
+                }
             }
         } else {
             JOptionPane.showMessageDialog(this, "Please select an expense to delete.", "Error", JOptionPane.ERROR_MESSAGE);
@@ -220,61 +269,52 @@ public class ExpenditureTrackingFrame extends JFrame {
     }
 
     private void clearForm() {
-        JTextField dateField = (JTextField) ((JPanel) ((JPanel) getContentPane().getComponent(0)).getComponent(1)).getComponent(3);
-        JComboBox<String> categoryCombo = (JComboBox<String>) ((JPanel) ((JPanel) getContentPane().getComponent(0)).getComponent(1)).getComponent(5);
-        JComboBox<DataManager.Supplier> supplierCombo = (JComboBox<DataManager.Supplier>) ((JPanel) ((JPanel) getContentPane().getComponent(0)).getComponent(1)).getComponent(7);
-        JTextField descriptionField = (JTextField) ((JPanel) ((JPanel) getContentPane().getComponent(0)).getComponent(1)).getComponent(9);
-        JTextField amountField = (JTextField) ((JPanel) ((JPanel) getContentPane().getComponent(0)).getComponent(1)).getComponent(11);
-        JComboBox<String> paymentTypeCombo = (JComboBox<String>) ((JPanel) ((JPanel) getContentPane().getComponent(0)).getComponent(1)).getComponent(13);
+        JTextField dateField = (JTextField) ((JPanel) ((JPanel) ((JPanel) getContentPane().getComponent(0)).getComponent(1)).getComponent(0)).getComponent(1);
+        JTextField descriptionField = (JTextField) ((JPanel) ((JPanel) ((JPanel) getContentPane().getComponent(0)).getComponent(1)).getComponent(0)).getComponent(3);
+        JTextField amountField = (JTextField) ((JPanel) ((JPanel) ((JPanel) getContentPane().getComponent(0)).getComponent(1)).getComponent(0)).getComponent(5);
+        JComboBox<String> paymentTypeCombo = (JComboBox<String>) ((JPanel) ((JPanel) ((JPanel) getContentPane().getComponent(0)).getComponent(1)).getComponent(0)).getComponent(7);
 
         dateField.setText(new SimpleDateFormat("dd-MM-yyyy").format(new Date()));
-        categoryCombo.setSelectedIndex(0);
-        supplierCombo.setSelectedIndex(0);
         descriptionField.setText("");
         amountField.setText("0");
         paymentTypeCombo.setSelectedIndex(0);
     }
 
     private JPanel createButtonPanel() {
-        JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
+        JPanel buttonPanel = new JPanel(new GridLayout(2, 3, 10, 5));
         buttonPanel.setBackground(Color.WHITE);
 
-        JButton addExpenseButton = createStyledButton("Add Expense");
-        JButton deleteExpenseButton = createStyledButton("Delete Expense");
+        JButton addButton = createStyledButton("Add");
+        JButton deleteButton = createStyledButton("Delete");
         JButton clearButton = createStyledButton("Clear");
         JButton dailyReportButton = createStyledButton("Daily Report");
         JButton monthlyReportButton = createStyledButton("Monthly Report");
         JButton quarterlyReportButton = createStyledButton("Quarterly Report");
-        JButton backButton = createStyledButton("Back");
 
-        addExpenseButton.addActionListener(e -> addExpense());
-        deleteExpenseButton.addActionListener(e -> deleteExpense());
+        addButton.addActionListener(e -> addExpense());
+        deleteButton.addActionListener(e -> deleteExpense());
         clearButton.addActionListener(e -> clearForm());
         dailyReportButton.addActionListener(e -> generateDailyReport());
         monthlyReportButton.addActionListener(e -> generateMonthlyReport());
         quarterlyReportButton.addActionListener(e -> generateQuarterlyReport());
-        backButton.addActionListener(e -> {
-            dispose();
-            new MainDashboard();
-        });
 
-        buttonPanel.add(addExpenseButton);
-        buttonPanel.add(deleteExpenseButton);
+        buttonPanel.add(addButton);
+        buttonPanel.add(deleteButton);
         buttonPanel.add(clearButton);
         buttonPanel.add(dailyReportButton);
         buttonPanel.add(monthlyReportButton);
         buttonPanel.add(quarterlyReportButton);
-        buttonPanel.add(backButton);
 
         return buttonPanel;
     }
 
     private void generateDailyReport() {
         JTextField reportDateField = new JTextField("dd-MM-yyyy");
-        reportDateField.setFont(new Font("Arial", Font.PLAIN, 14));
+        reportDateField.setFont(new Font("Segoe UI", Font.PLAIN, 12));
         reportDateField.setForeground(Color.GRAY);
-        reportDateField.setBorder(BorderFactory.createLineBorder(Color.GRAY, 1));
+        reportDateField.setBorder(BorderFactory.createLineBorder(Color.GRAY));
         reportDateField.setToolTipText("Enter date in dd-MM-yyyy format (e.g., 21-05-2025) or double-click for today");
+        reportDateField.setPreferredSize(new Dimension(150, 25));
         reportDateField.addFocusListener(new FocusAdapter() {
             @Override
             public void focusGained(FocusEvent e) {
@@ -297,12 +337,11 @@ public class ExpenditureTrackingFrame extends JFrame {
                 if (e.getClickCount() == 2) {
                     reportDateField.setText(new SimpleDateFormat("dd-MM-yyyy").format(new Date()));
                     reportDateField.setForeground(Color.BLACK);
-                    reportDateField.setBorder(BorderFactory.createLineBorder(Color.GRAY, 1));
                 }
             }
         });
 
-        JPanel panel = new JPanel(new GridLayout(1, 2));
+        JPanel panel = new JPanel(new GridLayout(1, 2, 5, 5));
         panel.add(new JLabel("Select Date:"));
         panel.add(reportDateField);
 
@@ -312,9 +351,10 @@ public class ExpenditureTrackingFrame extends JFrame {
         String selectedDate = reportDateField.getText().trim();
         SimpleDateFormat sdf = new SimpleDateFormat("dd-MM-yyyy");
         sdf.setLenient(false);
+        Date parsedDate;
         try {
-            Date date = sdf.parse(selectedDate);
-            if (date.after(new Date())) {
+            parsedDate = sdf.parse(selectedDate);
+            if (parsedDate.after(new Date())) {
                 JOptionPane.showMessageDialog(this, "Cannot select a future date.", "Error", JOptionPane.ERROR_MESSAGE);
                 return;
             }
@@ -323,24 +363,33 @@ public class ExpenditureTrackingFrame extends JFrame {
             return;
         }
 
-        DataManager dataManager = DataManager.getInstance();
         double totalExpenditure = 0;
         StringBuilder report = new StringBuilder();
         report.append("Daily Expenditure Report (").append(selectedDate).append(")\n\n");
 
-        for (DataManager.Expenditure expenditure : dataManager.getExpenditures()) {
-            if (expenditure.date.equals(selectedDate)) {
-                totalExpenditure += expenditure.amount;
-                report.append(String.format("ID: EXP-%d, Date: %s, Category: %s, Supplier: %s, Amount: %.2f, Payment: %s, Desc: %s\n",
-                        expenditure.id, expenditure.date, expenditure.category,
-                        expenditure.supplier != null ? expenditure.supplier.name : "N/A",
-                        expenditure.amount, expenditure.paymentType, expenditure.description));
+        try (Connection conn = getConnection();
+             PreparedStatement pstmt = conn.prepareStatement(
+                     "SELECT expenditure_date, description, amount, payment_type FROM expenditures WHERE expenditure_date = ?")) {
+            pstmt.setDate(1, new java.sql.Date(parsedDate.getTime()));
+            ResultSet rs = pstmt.executeQuery();
+            while (rs.next()) {
+                double amount = rs.getDouble("amount");
+                totalExpenditure += amount;
+                report.append(String.format("Date: %s, Amount: %.2f, Payment: %s, Desc: %s\n",
+                        sdf.format(rs.getDate("expenditure_date")),
+                        amount,
+                        rs.getString("payment_type"),
+                        rs.getString("description")));
             }
+        } catch (SQLException e) {
+            JOptionPane.showMessageDialog(this, "Error generating report: " + e.getMessage(), "Database Error", JOptionPane.ERROR_MESSAGE);
+            return;
         }
+
         report.append(String.format("\nTotal Expenditure: %.2f", totalExpenditure));
 
         JTextArea reportArea = new JTextArea(report.toString());
-        reportArea.setFont(new Font("Arial", Font.PLAIN, 14));
+        reportArea.setFont(new Font("Segoe UI", Font.PLAIN, 12));
         reportArea.setEditable(false);
         JScrollPane reportScroll = new JScrollPane(reportArea);
         reportScroll.setPreferredSize(new Dimension(400, 300));
@@ -364,8 +413,9 @@ public class ExpenditureTrackingFrame extends JFrame {
         }
 
         JComboBox<String> monthCombo = new JComboBox<>(monthYears.toArray(new String[0]));
-        monthCombo.setFont(new Font("Arial", Font.PLAIN, 14));
-        JPanel panel = new JPanel(new GridLayout(1, 2));
+        monthCombo.setFont(new Font("Segoe UI", Font.PLAIN, 12));
+        monthCombo.setPreferredSize(new Dimension(200, 25));
+        JPanel panel = new JPanel(new GridLayout(1, 2, 5, 5));
         panel.add(new JLabel("Select Month:"));
         panel.add(monthCombo);
 
@@ -387,34 +437,35 @@ public class ExpenditureTrackingFrame extends JFrame {
             }
         }
 
-        SimpleDateFormat sdf = new SimpleDateFormat("dd-MM-yyyy");
-        DataManager dataManager = DataManager.getInstance();
         double totalExpenditure = 0;
         StringBuilder report = new StringBuilder();
         report.append("Monthly Expenditure Report (").append(selectedMonthYear).append(")\n\n");
 
-        for (DataManager.Expenditure expenditure : dataManager.getExpenditures()) {
-            try {
-                Date date = sdf.parse(expenditure.date);
-                Calendar expenditureCal = Calendar.getInstance();
-                expenditureCal.setTime(date);
-                int expenditureMonth = expenditureCal.get(Calendar.MONTH) + 1;
-                int expenditureYear = expenditureCal.get(Calendar.YEAR);
-                if (expenditureYear == year && expenditureMonth == monthNumber) {
-                    totalExpenditure += expenditure.amount;
-                    report.append(String.format("ID: EXP-%d, Date: %s, Category: %s, Supplier: %s, Amount: %.2f, Payment: %s, Desc: %s\n",
-                            expenditure.id, expenditure.date, expenditure.category,
-                            expenditure.supplier != null ? expenditure.supplier.name : "N/A",
-                            expenditure.amount, expenditure.paymentType, expenditure.description));
-                }
-            } catch (ParseException e) {
-                // Skip invalid dates
+        try (Connection conn = getConnection();
+             PreparedStatement pstmt = conn.prepareStatement(
+                     "SELECT expenditure_date, description, amount, payment_type FROM expenditures WHERE YEAR(expenditure_date) = ? AND MONTH(expenditure_date) = ?")) {
+            pstmt.setInt(1, year);
+            pstmt.setInt(2, monthNumber);
+            ResultSet rs = pstmt.executeQuery();
+            SimpleDateFormat sdf = new SimpleDateFormat("dd-MM-yyyy");
+            while (rs.next()) {
+                double amount = rs.getDouble("amount");
+                totalExpenditure += amount;
+                report.append(String.format("Date: %s, Amount: %.2f, Payment: %s, Desc: %s\n",
+                        sdf.format(rs.getDate("expenditure_date")),
+                        amount,
+                        rs.getString("payment_type"),
+                        rs.getString("description")));
             }
+        } catch (SQLException e) {
+            JOptionPane.showMessageDialog(this, "Error generating report: " + e.getMessage(), "Database Error", JOptionPane.ERROR_MESSAGE);
+            return;
         }
+
         report.append(String.format("\nTotal Expenditure: %.2f", totalExpenditure));
 
         JTextArea reportArea = new JTextArea(report.toString());
-        reportArea.setFont(new Font("Arial", Font.PLAIN, 14));
+        reportArea.setFont(new Font("Segoe UI", Font.PLAIN, 12));
         reportArea.setEditable(false);
         JScrollPane reportScroll = new JScrollPane(reportArea);
         reportScroll.setPreferredSize(new Dimension(400, 300));
@@ -434,8 +485,9 @@ public class ExpenditureTrackingFrame extends JFrame {
         }
 
         JComboBox<String> halfYearCombo = new JComboBox<>(halfYears.toArray(new String[0]));
-        halfYearCombo.setFont(new Font("Arial", Font.PLAIN, 14));
-        JPanel panel = new JPanel(new GridLayout(1, 2));
+        halfYearCombo.setFont(new Font("Segoe UI", Font.PLAIN, 12));
+        halfYearCombo.setPreferredSize(new Dimension(200, 25));
+        JPanel panel = new JPanel(new GridLayout(1, 2, 5, 5));
         panel.add(new JLabel("Select Half-Year:"));
         panel.add(halfYearCombo);
 
@@ -449,34 +501,36 @@ public class ExpenditureTrackingFrame extends JFrame {
         int startMonth = half.equals("1st") ? 1 : 7;
         int endMonth = half.equals("1st") ? 6 : 12;
 
-        SimpleDateFormat sdf = new SimpleDateFormat("dd-MM-yyyy");
-        DataManager dataManager = DataManager.getInstance();
         double totalExpenditure = 0;
         StringBuilder report = new StringBuilder();
-        report.append("Quarterly Expenditure Report (").append(selectedHalfYear).append(")\n\n");
+        report.append("Quarterly expenditure Report (").append(selectedHalfYear).append(")\n\n");
 
-        for (DataManager.Expenditure expenditure : dataManager.getExpenditures()) {
-            try {
-                Date date = sdf.parse(expenditure.date);
-                Calendar expenditureCal = Calendar.getInstance();
-                expenditureCal.setTime(date);
-                int expenditureMonth = expenditureCal.get(Calendar.MONTH) + 1;
-                int expenditureYear = expenditureCal.get(Calendar.YEAR);
-                if (expenditureYear == year && expenditureMonth >= startMonth && expenditureMonth <= endMonth) {
-                    totalExpenditure += expenditure.amount;
-                    report.append(String.format("ID: EXP-%d, Date: %s, Category: %s, Supplier: %s, Amount: %.2f, Payment: %s, Desc: %s\n",
-                            expenditure.id, expenditure.date, expenditure.category,
-                            expenditure.supplier != null ? expenditure.supplier.name : "N/A",
-                            expenditure.amount, expenditure.paymentType, expenditure.description));
-                }
-            } catch (ParseException e) {
-                // Skip invalid dates
+        try (Connection conn = getConnection();
+             PreparedStatement pstmt = conn.prepareStatement(
+                     "SELECT expenditure_date, description, amount, payment_type FROM expenditures WHERE YEAR(expenditure_date) = ? AND MONTH(expenditure_date) BETWEEN ? AND ?")) {
+            pstmt.setInt(1, year);
+            pstmt.setInt(2, startMonth);
+            pstmt.setInt(3, endMonth);
+            ResultSet rs = pstmt.executeQuery();
+            SimpleDateFormat sdf = new SimpleDateFormat("dd-MM-yyyy");
+            while (rs.next()) {
+                double amount = rs.getDouble("amount");
+                totalExpenditure += amount;
+                report.append(String.format("Date: %s, Amount: %.2f, Payment: %s, Desc: %s\n",
+                        sdf.format(rs.getDate("expenditure_date")),
+                        amount,
+                        rs.getString("payment_type"),
+                        rs.getString("description")));
             }
+        } catch (SQLException e) {
+            JOptionPane.showMessageDialog(this, "Error generating report: " + e.getMessage(), "Database Error", JOptionPane.ERROR_MESSAGE);
+            return;
         }
+
         report.append(String.format("\nTotal Expenditure: %.2f", totalExpenditure));
 
         JTextArea reportArea = new JTextArea(report.toString());
-        reportArea.setFont(new Font("Arial", Font.PLAIN, 14));
+        reportArea.setFont(new Font("Segoe UI", Font.PLAIN, 12));
         reportArea.setEditable(false);
         JScrollPane reportScroll = new JScrollPane(reportArea);
         reportScroll.setPreferredSize(new Dimension(400, 300));
