@@ -41,7 +41,7 @@ public class SalesEntryFrame extends JFrame {
 
     public SalesEntryFrame() {
         setTitle("Zaib Autos - Sales Entry");
-        setSize(1200, 750); // Increased by 10% from 800x600
+        setSize(1200, 750);
         setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
         setLocationRelativeTo(null);
         setLayout(new BorderLayout());
@@ -84,52 +84,26 @@ public class SalesEntryFrame extends JFrame {
     private JButton createStyledButton(String text) {
         JButton button = new JButton(text);
         button.setFont(new Font("Segoe UI", Font.BOLD, 14));
-        button.setBackground(new Color(0, 123, 255));
+        button.setBackground(new Color(0, 111, 255));
         button.setForeground(Color.WHITE);
         button.setFocusPainted(false);
-        button.setBorder(new RoundBorder(10)); // Rounded corners with 10px radius
-        button.setOpaque(true); // Needed for background color
+        button.setOpaque(true);
         button.addMouseListener(new MouseAdapter() {
             @Override
             public void mouseEntered(MouseEvent e) {
-                button.setBackground(new Color(0, 105, 217));
+                button.setBackground(new Color(0, 69, 217));
             }
 
             @Override
             public void mouseExited(MouseEvent e) {
-                button.setBackground(new Color(0, 123, 255));
+                button.setBackground(new Color(0, 111, 255));
             }
         });
         return button;
     }
 
-    // Custom rounded border class
-    private static class RoundBorder implements Border {
-        private int radius;
-
-        RoundBorder(int radius) {
-            this.radius = radius;
-        }
-
-        public Insets getBorderInsets(Component c) {
-            return new Insets(5, 15, 5, 15); // Match original padding
-        }
-
-        public boolean isBorderOpaque() {
-            return false;
-        }
-
-        public void paintBorder(Component c, Graphics g, int x, int y, int width, int height) {
-            Graphics2D g2 = (Graphics2D) g.create();
-            g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-            g2.setColor(new Color(96, 96, 96)); // Grey border
-            g2.drawRoundRect(x, y, width - 1, height - 1, radius, radius);
-            g2.dispose();
-        }
-    }
-
     private JPanel createButtonPanel() {
-        JPanel panel = new JPanel(new FlowLayout(FlowLayout.CENTER, 10, 10)); // Center-aligned buttons
+        JPanel panel = new JPanel(new FlowLayout(FlowLayout.CENTER, 10, 10));
         panel.setBackground(Color.WHITE);
         JButton addItemButton = createStyledButton("Add Item");
         JButton removeItemButton = createStyledButton("Remove Item");
@@ -218,7 +192,7 @@ public class SalesEntryFrame extends JFrame {
         try (Connection conn = DriverManager.getConnection(DB_URL, DB_USER, DB_PASSWORD);
              Statement stmt = conn.createStatement();
              ResultSet rs = stmt.executeQuery("SELECT product_id, item_name, brand, type, uom, stock FROM products")) {
-            productMap.clear(); // Clear existing map to avoid duplicates
+            productMap.clear();
             while (rs.next()) {
                 String displayName = rs.getString("item_name") + " (" + rs.getString("brand") + ")";
                 productMap.put(displayName, new Product(
@@ -270,7 +244,6 @@ public class SalesEntryFrame extends JFrame {
                 return;
             }
 
-            // Update local stock
             product.stock -= quantity;
             double total = quantity * price;
             totalAmount += total;
@@ -320,7 +293,7 @@ public class SalesEntryFrame extends JFrame {
 
             Product product = productMap.get(displayName);
             if (product != null) {
-                product.stock += quantity; // Restore local stock
+                product.stock += quantity;
                 stockLabel.setText("Stock: " + product.stock);
             }
         } else {
@@ -328,11 +301,12 @@ public class SalesEntryFrame extends JFrame {
         }
     }
 
+
     private void returnItem() {
         JDialog dialog = new JDialog(this, "Return Item", true);
         dialog.setLayout(new GridBagLayout());
         dialog.setBackground(Color.WHITE);
-        dialog.setSize(300, 250);
+        dialog.setSize(450, 300);
         dialog.setLocationRelativeTo(this);
 
         GridBagConstraints gbc = new GridBagConstraints();
@@ -415,11 +389,13 @@ public class SalesEntryFrame extends JFrame {
                 }
 
                 try (Connection conn = DriverManager.getConnection(DB_URL, DB_USER, DB_PASSWORD)) {
+                    // Set transaction isolation to avoid concurrent issues
+                    conn.setTransactionIsolation(Connection.TRANSACTION_READ_COMMITTED);
                     conn.setAutoCommit(false);
                     try {
-                        // Lock the product row to prevent concurrent modifications
+                        // Check current database stock
                         PreparedStatement checkProduct = conn.prepareStatement(
-                                "SELECT stock FROM products WHERE product_id = ? FOR UPDATE");
+                                "SELECT stock FROM products WHERE product_id = ?");
                         checkProduct.setInt(1, product.productId);
                         ResultSet rs = checkProduct.executeQuery();
                         int currentStock;
@@ -428,6 +404,14 @@ public class SalesEntryFrame extends JFrame {
                             System.out.println("DEBUG: Product ID " + product.productId + " (" + product.itemName + ") current stock: " + currentStock);
                         } else {
                             throw new SQLException("Product not found in database: " + product.itemName);
+                        }
+
+                        // Log database diagnostics
+                        PreparedStatement diagnostics = conn.prepareStatement(
+                                "SELECT DATABASE(), TABLE_NAME, ENGINE FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'products'");
+                        rs = diagnostics.executeQuery();
+                        if (rs.next()) {
+                            System.out.println("DEBUG: Current database: " + rs.getString("DATABASE()") + ", Table: " + rs.getString("TABLE_NAME") + ", Engine: " + rs.getString("ENGINE"));
                         }
 
                         // Insert negative sales record
@@ -446,10 +430,11 @@ public class SalesEntryFrame extends JFrame {
                         int salesRows = pstmt.executeUpdate();
                         System.out.println("DEBUG: Sales record inserted, rows affected: " + salesRows);
 
-                        // Update stock in products table
+                        // Update stock in database with absolute value
+                        System.out.println("DEBUG: Attempting to update stock to " + (currentStock + quantity) + " for Product ID: " + product.productId);
                         PreparedStatement updateStock = conn.prepareStatement(
-                                "UPDATE products SET stock = stock + ? WHERE product_id = ?");
-                        updateStock.setInt(1, quantity);
+                                "UPDATE products SET stock = ? WHERE product_id = ?");
+                        updateStock.setInt(1, currentStock + quantity);
                         updateStock.setInt(2, product.productId);
                         int rowsAffected = updateStock.executeUpdate();
                         System.out.println("DEBUG: Stock update attempted, rows affected: " + rowsAffected);
@@ -457,20 +442,11 @@ public class SalesEntryFrame extends JFrame {
                             throw new SQLException("Failed to update stock for product: " + product.itemName + " (Expected 1 row affected, got " + rowsAffected + ")");
                         }
 
-                        // Verify stock after update but before commit
-                        rs = checkProduct.executeQuery();
-                        if (rs.next()) {
-                            int preCommitStock = rs.getInt("stock");
-                            System.out.println("DEBUG: Pre-commit stock for Product ID " + product.productId + ": " + preCommitStock);
-                            if (preCommitStock != currentStock + quantity) {
-                                System.err.println("DEBUG WARNING: Pre-commit stock inconsistency. Expected " + (currentStock + quantity) + ", got " + preCommitStock);
-                            }
-                        }
-
+                        // Commit transaction
                         conn.commit();
                         System.out.println("DEBUG: Transaction committed successfully");
 
-                        // Verify stock after commit
+                        // Verify stock post-commit
                         PreparedStatement postCommitCheck = conn.prepareStatement(
                                 "SELECT stock FROM products WHERE product_id = ?");
                         postCommitCheck.setInt(1, product.productId);
@@ -480,21 +456,25 @@ public class SalesEntryFrame extends JFrame {
                             System.out.println("DEBUG: Post-commit stock for Product ID " + product.productId + ": " + finalStock);
                             if (finalStock != currentStock + quantity) {
                                 System.err.println("DEBUG ERROR: Post-commit stock inconsistency. Expected " + (currentStock + quantity) + ", got " + finalStock);
-                                JOptionPane.showMessageDialog(dialog, "Stock update failed: Inconsistent stock value after commit.", "Error", JOptionPane.ERROR_MESSAGE);
-                                conn.rollback();
+                                JOptionPane.showMessageDialog(dialog, "Stock update verification failed: Expected stock " + (currentStock + quantity) + ", got " + finalStock, "Error", JOptionPane.ERROR_MESSAGE);
+                                // Reload productMap to sync with database
+                                initializeProducts();
                                 return;
                             }
                         } else {
                             throw new SQLException("Product not found after commit: " + product.itemName);
                         }
 
+                        // Update local productMap stock
+                        product.stock = currentStock + quantity;
+                        System.out.println("DEBUG: Updated local productMap stock for Product ID " + product.productId + " to " + product.stock);
+
                         JOptionPane.showMessageDialog(dialog,
                                 String.format("Returned %d units of %s successfully! New stock: %d",
                                         quantity, product.itemName, currentStock + quantity),
                                 "Success", JOptionPane.INFORMATION_MESSAGE);
 
-                        // Refresh productMap and update stockLabel
-                        initializeProducts();
+                        // Update UI
                         String selectedProduct = (String) productCombo.getSelectedItem();
                         Product updatedProduct = productMap.get(selectedProduct);
                         stockLabel.setText("Stock: " + (updatedProduct != null ? updatedProduct.stock : 0));
@@ -503,6 +483,8 @@ public class SalesEntryFrame extends JFrame {
                         conn.rollback();
                         System.err.println("DEBUG: Transaction rolled back due to error: " + ex.getMessage());
                         JOptionPane.showMessageDialog(dialog, "Error processing return: " + ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
+                        // Reload productMap to sync with database
+                        initializeProducts();
                     }
                 } catch (SQLException ex) {
                     System.err.println("DEBUG: Database connection error: " + ex.getMessage());
@@ -533,6 +515,7 @@ public class SalesEntryFrame extends JFrame {
         dialog.setVisible(true);
     }
 
+
     private void clearForm() {
         saleTableModel.setRowCount(0);
         totalAmount = 0;
@@ -542,7 +525,7 @@ public class SalesEntryFrame extends JFrame {
         quantityField.setBorder(defaultBorder);
         priceField.setBorder(defaultBorder);
         dateField.setBorder(defaultBorder);
-        initializeProducts(); // Reset local stock
+        initializeProducts();
         String selectedProduct = (String) productCombo.getSelectedItem();
         Product product = productMap.get(selectedProduct);
         stockLabel.setText("Stock: " + (product != null ? product.stock : 0));
@@ -554,7 +537,7 @@ public class SalesEntryFrame extends JFrame {
             return;
         }
 
-        // Validate stock availability in database
+        // Aggregate quantities by product_id to check stock
         Map<Integer, Integer> productQuantities = new HashMap<>();
         for (int i = 0; i < saleTableModel.getRowCount(); i++) {
             String productName = (String) saleTableModel.getValueAt(i, 1);
@@ -572,28 +555,32 @@ public class SalesEntryFrame extends JFrame {
         }
 
         try (Connection conn = DriverManager.getConnection(DB_URL, DB_USER, DB_PASSWORD)) {
-            // Check stock in database
-            for (Map.Entry<Integer, Integer> entry : productQuantities.entrySet()) {
-                PreparedStatement checkStock = conn.prepareStatement(
-                        "SELECT stock FROM products WHERE product_id = ?");
-                checkStock.setInt(1, entry.getKey());
-                ResultSet rs = checkStock.executeQuery();
-                if (rs.next()) {
-                    int currentStock = rs.getInt("stock");
-                    if (entry.getValue() > currentStock) {
-                        JOptionPane.showMessageDialog(this,
-                                "Insufficient stock for product ID " + entry.getKey() + ". Available: " + currentStock,
-                                "Error", JOptionPane.ERROR_MESSAGE);
-                        return;
-                    }
-                } else {
-                    JOptionPane.showMessageDialog(this, "Product ID " + entry.getKey() + " not found in database.", "Error", JOptionPane.ERROR_MESSAGE);
-                    return;
-                }
-            }
-
             conn.setAutoCommit(false);
             try {
+                // Validate stock in database
+                for (Map.Entry<Integer, Integer> entry : productQuantities.entrySet()) {
+                    PreparedStatement checkStock = conn.prepareStatement(
+                            "SELECT stock FROM products WHERE product_id = ? FOR UPDATE");
+                    checkStock.setInt(1, entry.getKey());
+                    ResultSet rs = checkStock.executeQuery();
+                    if (rs.next()) {
+                        int currentStock = rs.getInt("stock");
+                        System.out.println("DEBUG: Product ID " + entry.getKey() + " current DB stock: " + currentStock);
+                        if (entry.getValue() > currentStock) {
+                            JOptionPane.showMessageDialog(this,
+                                    "Insufficient stock for product ID " + entry.getKey() + ". Available: " + currentStock,
+                                    "Error", JOptionPane.ERROR_MESSAGE);
+                            conn.rollback();
+                            return;
+                        }
+                    } else {
+                        JOptionPane.showMessageDialog(this, "Product ID " + entry.getKey() + " not found in database.", "Error", JOptionPane.ERROR_MESSAGE);
+                        conn.rollback();
+                        return;
+                    }
+                }
+
+                // Insert sale records
                 for (int i = 0; i < saleTableModel.getRowCount(); i++) {
                     String productName = (String) saleTableModel.getValueAt(i, 1);
                     String brand = (String) saleTableModel.getValueAt(i, 2);
@@ -612,7 +599,6 @@ public class SalesEntryFrame extends JFrame {
                     Date parsedDate = sdf.parse(dateStr);
                     String sqlDate = new SimpleDateFormat("yyyy-MM-dd").format(parsedDate);
 
-                    // Insert sale record
                     PreparedStatement pstmt = conn.prepareStatement(
                             "INSERT INTO sales (product_id, product_name, brand, type, uom, quantity, price, total, date) " +
                                     "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)");
@@ -625,27 +611,36 @@ public class SalesEntryFrame extends JFrame {
                     pstmt.setBigDecimal(7, BigDecimal.valueOf(price));
                     pstmt.setBigDecimal(8, BigDecimal.valueOf(total));
                     pstmt.setString(9, sqlDate);
-                    pstmt.executeUpdate();
+                    int rowsAffected = pstmt.executeUpdate();
+                    System.out.println("DEBUG: Inserted sale record for Product ID " + product.productId + ", rows affected: " + rowsAffected);
+                }
 
-                    // Update stock in database
+                // Update stock in database based on productMap
+                for (Map.Entry<String, Product> entry : productMap.entrySet()) {
+                    Product product = entry.getValue();
                     PreparedStatement updateStock = conn.prepareStatement(
-                            "UPDATE products SET stock = stock - ? WHERE product_id = ?");
-                    updateStock.setInt(1, quantity);
+                            "UPDATE products SET stock = ? WHERE product_id = ?");
+                    updateStock.setInt(1, product.stock);
                     updateStock.setInt(2, product.productId);
                     int rowsAffected = updateStock.executeUpdate();
-                    if (rowsAffected == 0) {
-                        throw new SQLException("Product not found in database: " + product.itemName);
+                    System.out.println("DEBUG: Updated stock for Product ID " + product.productId + " to " + product.stock + ", rows affected: " + rowsAffected);
+                    if (rowsAffected != 1) {
+                        throw new SQLException("Failed to update stock for product ID: " + product.productId);
                     }
                 }
+
                 conn.commit();
+                System.out.println("DEBUG: Sale transaction committed successfully");
                 JOptionPane.showMessageDialog(this, "Sale saved successfully!", "Success", JOptionPane.INFORMATION_MESSAGE);
                 clearForm();
                 initializeProducts();
             } catch (SQLException | ParseException ex) {
                 conn.rollback();
+                System.err.println("DEBUG: Transaction rolled back due to error: " + ex.getMessage());
                 JOptionPane.showMessageDialog(this, "Error saving sale: " + ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
             }
         } catch (SQLException ex) {
+            System.err.println("DEBUG: Database connection error: " + ex.getMessage());
             JOptionPane.showMessageDialog(this, "Error connecting to database: " + ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
         }
     }
@@ -695,7 +690,10 @@ public class SalesEntryFrame extends JFrame {
                 dailyTable.setRowHeight(25);
                 dailyTable.setGridColor(new Color(200, 200, 200));
                 dailyTable.setShowGrid(true);
+                dailyTable.setPreferredScrollableViewportSize(new Dimension(800, 500)); // Set viewport size
+                dailyTable.setAutoResizeMode(JTable.AUTO_RESIZE_ALL_COLUMNS); // Ensure columns fit
                 JScrollPane scrollPane = new JScrollPane(dailyTable);
+                scrollPane.setPreferredSize(new Dimension(820, 520)); // Slightly larger to account for scrollbars
                 JOptionPane.showMessageDialog(this, scrollPane, "Daily Sales - " + selectedDate, JOptionPane.PLAIN_MESSAGE);
             } catch (SQLException ex) {
                 JOptionPane.showMessageDialog(this, "Error loading daily sales: " + ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
